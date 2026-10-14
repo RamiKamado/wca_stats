@@ -1,0 +1,1124 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>WCA 個人成績ビューア</title>
+<meta name="description" content="WCA（World Cube Association）の公式記録から、選手ごとの自己ベスト・ランキング・成績履歴・統計を表示します。">
+<meta name="theme-color" content="#111827">
+<meta name="color-scheme" content="light dark">
+<meta name="format-detection" content="telephone=no">
+<!-- ホーム画面に追加したとき、Safariのツールバーなしで全画面表示する -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="WCA Stats">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" href="icons/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="icons/icon-192.png" type="image/png" sizes="192x192">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans+JP:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: a scorecard-style column — search bar, profile, PB table, event drill-down, competition log */
+:root{
+  color-scheme: light;
+  --bg:#f3f5f8; --surface:#ffffff; --sunk:#eaeef4;
+  --ink:#121620; --muted:#576074; --faint:#8b93a5; --line:#dce1e9;
+  --accent:#2a78d6; --accent-ink:#1c5cab; --avg:#eb6834;
+  --gold:#b48d14; --silver:#8a949f; --bronze:#a5622b; --bad:#c43c3b;
+  --rec-nr:#16855e; --rec-cr:#b86e00; --rec-wr:#c8323a;
+  --band:#111827; --band-ink:#f2f4f8; --band-muted:#9aa4b8; --band-field:#1e2738; --band-line:#334059;
+  --f-display:"Barlow Condensed","Arial Narrow","Hiragino Sans",sans-serif;
+  --f-body:"IBM Plex Sans JP","Hiragino Sans","Noto Sans JP","Yu Gothic",sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#0f1218; --surface:#171b23; --sunk:#1f2530;
+  --ink:#edf0f5; --muted:#a3abba; --faint:#76808f; --line:#2a313d;
+  --accent:#3987e5; --accent-ink:#86b6ef; --avg:#d95926;
+  --gold:#d6ad35; --silver:#aab3be; --bronze:#c98450; --bad:#e66767; --rec-nr:#1f9b6e; --rec-cr:#c98500; --rec-wr:#e0484f; --band:#0a0d13; --band-field:#161c28; --band-line:#2a3345; color-scheme:dark; } }
+:root[data-theme="dark"]{
+  --bg:#0f1218; --surface:#171b23; --sunk:#1f2530;
+  --ink:#edf0f5; --muted:#a3abba; --faint:#76808f; --line:#2a313d;
+  --accent:#3987e5; --accent-ink:#86b6ef; --avg:#d95926;
+  --gold:#d6ad35; --silver:#aab3be; --bronze:#c98450; --bad:#e66767; --rec-nr:#1f9b6e; --rec-cr:#c98500; --rec-wr:#e0484f; --band:#0a0d13; --band-field:#161c28; --band-line:#2a3345; color-scheme:dark; }
+
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.6 var(--f-body);
+  padding-block:0 calc(48px + env(safe-area-inset-bottom,0px));-webkit-tap-highlight-color:transparent}
+.wrap{max-width:1120px;margin:0 auto;box-sizing:content-box;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.wrap.inner{max-width:1120px}
+/* dark band at the top: under the iPhone status bar when launched from the home screen */
+.band{background:var(--band);color:var(--band-ink);padding-top:env(safe-area-inset-top,0px)}
+a{color:var(--accent-ink)}
+button,input,select{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.num,.mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+
+/* top bar */
+.top{display:flex;flex-wrap:wrap;align-items:center;gap:12px 20px;padding-block:16px}
+.brand{font:700 22px/1 var(--f-display);letter-spacing:.04em;text-transform:uppercase;display:flex;align-items:center;gap:10px;white-space:nowrap}
+.brand i{display:grid;grid-template-columns:repeat(3,6px);gap:2px}
+.brand i b{width:6px;height:6px;border-radius:1.5px;background:var(--band-muted)}
+.brand i b:nth-child(5){background:var(--accent)}
+.search{flex:1 1 360px;display:flex;gap:8px;min-width:0}
+.search input{flex:1;min-width:0;padding:10px 14px;border:1px solid var(--band-line);border-radius:8px;background:var(--band-field);color:var(--band-ink);font-size:16px}
+.search input::placeholder{color:var(--band-muted)}
+.search button,.btn{padding:10px 16px;border:0;border-radius:8px;background:var(--accent);color:#fff;font-weight:600;cursor:pointer;white-space:nowrap}
+.btn.ghost{background:transparent;color:var(--accent-ink);border:1px solid var(--line);padding:6px 12px;font-weight:500}
+.status{min-height:24px;margin-top:10px;color:var(--muted);font-size:13.5px;display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center}
+.status.err{color:var(--bad)}
+.bar{flex:0 0 160px;height:4px;background:var(--sunk);border-radius:2px;overflow:hidden}
+.bar span{display:block;height:100%;background:var(--accent);width:0;transition:width .2s}
+.cands{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.cands button{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:6px 10px;cursor:pointer;text-align:left}
+.cands small{display:block;color:var(--muted);font-family:var(--f-mono);font-size:12px}
+
+/* profile */
+.profile{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:16px 32px;align-items:end;padding-block:28px 22px}
+.eyebrow{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:500}
+h1{font:700 clamp(34px,6vw,56px)/1 var(--f-display);margin:6px 0 10px;text-wrap:balance;letter-spacing:.01em}
+.meta{display:flex;flex-wrap:wrap;gap:6px 14px;color:var(--muted);font-size:14px;align-items:center}
+.idpill{font-family:var(--f-mono);font-size:13px;padding:2px 8px;border-radius:6px;background:var(--sunk);color:var(--ink);text-decoration:none}
+.honors{display:flex;flex-wrap:wrap;gap:18px;justify-content:flex-end}
+.honor{display:flex;flex-direction:column;align-items:center;gap:2px;min-width:44px}
+.honor .disc{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;font:700 17px/1 var(--f-display);color:#fff}
+.honor small{font-size:11px;color:var(--muted)}
+.d-gold{background:var(--gold)}.d-silver{background:var(--silver)}.d-bronze{background:var(--bronze)}
+.d-rec{background:transparent;color:var(--ink)!important;border:2px solid var(--line)}
+
+/* tiles */
+.tiles{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.tile{background:var(--surface);padding:14px 16px;min-width:0}
+.tile .k{font-size:12px;color:var(--muted)}
+.tile .v{font:600 30px/1.15 var(--f-display);font-variant-numeric:tabular-nums;margin-top:2px}
+.tile .s{font-size:12px;color:var(--faint);font-family:var(--f-mono)}
+@media (max-width:860px){.tiles{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:460px){.tiles{grid-template-columns:repeat(2,minmax(0,1fr))}.profile{grid-template-columns:1fr}.honors{justify-content:flex-start}}
+
+/* sections */
+section{margin-top:40px}
+h2{font:600 26px/1.1 var(--f-display);letter-spacing:.02em;margin:0 0 4px;display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+h2 small{font:400 13px var(--f-body);color:var(--muted);letter-spacing:0}
+.lede{color:var(--muted);font-size:13.5px;margin:0 0 14px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px}
+.scroll{overflow-x:auto}
+
+/* tables */
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{padding:8px 10px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--line)}
+th{font-size:11.5px;font-weight:500;color:var(--muted);letter-spacing:.04em;background:var(--sunk);position:sticky;top:0}
+th.l,td.l{text-align:left}
+tbody tr:last-child td{border-bottom:0}
+td.num{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+td .rk{color:var(--faint);font-size:12.5px}
+td .nr{color:var(--accent-ink);font-weight:600}
+th.grp{text-align:center;border-left:1px solid var(--line)}
+td.bl,th.bl{border-left:1px solid var(--line)}
+#pbTable tbody tr{cursor:pointer}
+#pbTable tbody tr:hover td,#pbTable tbody tr.sel td{background:var(--sunk)}
+#pbTable tbody tr.sel td:first-child{box-shadow:inset 3px 0 0 var(--accent)}
+.evname{font-weight:500}
+.evname small{color:var(--faint);font-family:var(--f-mono);margin-left:6px;font-size:11.5px}
+.pods{display:inline-flex;gap:8px;font-family:var(--f-mono);font-size:13px}
+.pods span{display:inline-flex;align-items:center;gap:4px}
+.pods i{width:9px;height:9px;border-radius:50%;display:inline-block}
+.zero{color:var(--faint)}
+
+/* event detail */
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px}
+.chip{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:5px 12px;cursor:pointer;font-size:13.5px}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.evgrid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2.1fr);gap:16px;align-items:start}
+@media (max-width:900px){.evgrid{grid-template-columns:minmax(0,1fr)}}
+.box{padding:16px}
+.box h3{font:600 15px var(--f-body);margin:0 0 10px;color:var(--muted);letter-spacing:.02em}
+dl.stats{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;margin:0;font-size:14px}
+dl.stats dt{color:var(--muted)}
+dl.stats dd{margin:0;text-align:right;font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.rankhead{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:14px 16px 10px}
+.rankhead h3{margin:0;font:600 15px var(--f-body);color:var(--muted);letter-spacing:.02em}
+.rankhead .cnt{font-size:12.5px;color:var(--faint);margin-left:auto}
+.seg button:disabled{opacity:.4;cursor:not-allowed}
+.rankwrap{max-height:560px;overflow:auto;border-top:1px solid var(--line)}
+#rankTable td,#rankTable th{padding:6px 10px;font-size:13.5px}
+#rankTable th{z-index:1}
+#rankTable td.pos{color:var(--faint);font-family:var(--f-mono);font-size:12.5px;width:3.5em}
+#rankTable td.val{font-family:var(--f-mono);font-weight:600;font-variant-numeric:tabular-nums}
+#rankTable td.cmp{max-width:22em;overflow:hidden;text-overflow:ellipsis}
+#rankTable tr.top3 td.pos{color:var(--ink);font-weight:600}
+.ranknote{font-size:12px;color:var(--faint);padding:8px 16px 12px;border-top:1px solid var(--line)}
+.filterrow{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;margin:16px 0 10px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--surface)}
+.seg button{border:0;background:transparent;padding:6px 12px;cursor:pointer;font-size:13px}
+.seg button[aria-pressed="true"]{background:var(--sunk);font-weight:600}
+.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:12.5px;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend i{display:inline-block;width:16px;height:2px}
+.legend i.dot{width:7px;height:7px;border-radius:50%;opacity:.5}
+.charts{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:16px}
+@media (max-width:900px){.charts{grid-template-columns:minmax(0,1fr)}}
+.chart{position:relative;padding:14px 14px 8px}
+.chart h3{font:600 14px var(--f-body);margin:0 0 8px;color:var(--muted)}
+.chart svg{display:block;width:100%;overflow:visible}
+.axis text{fill:var(--faint);font:11px var(--f-mono)}
+.grid line{stroke:var(--line);stroke-width:1}
+.tip{position:absolute;pointer-events:none;background:var(--ink);color:var(--bg);font-size:12.5px;line-height:1.45;padding:7px 10px;border-radius:7px;max-width:260px;z-index:5;box-shadow:0 4px 14px rgba(0,0,0,.18)}
+.tip b{font-family:var(--f-mono);font-weight:600}
+.tip .t{opacity:.75;font-size:11.5px}
+.note{font-size:12.5px;color:var(--faint);padding:20px 4px}
+
+/* activity */
+.act{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);gap:16px}
+@media (max-width:900px){.act{grid-template-columns:minmax(0,1fr)}}
+.hl{list-style:none;margin:0;padding:0;display:grid;gap:10px}
+.hl li{display:grid;grid-template-columns:7.5em minmax(0,1fr);gap:10px;font-size:14px}
+.hl .k{color:var(--muted);font-size:13px}
+.hl .v{min-width:0}
+.hl .v small{display:block;color:var(--faint);font-size:12px;font-family:var(--f-mono)}
+.ctry{display:grid;gap:6px;margin-top:4px}
+.ctry div{display:grid;grid-template-columns:minmax(0,8em) minmax(0,1fr) 2.5em;gap:10px;align-items:center;font-size:13.5px}
+.ctry .track{height:8px;background:var(--sunk);border-radius:4px;overflow:hidden}
+.ctry .track span{display:block;height:100%;background:var(--accent);border-radius:4px}
+.ctry .c{text-align:right;font-family:var(--f-mono);color:var(--muted)}
+
+/* competition log */
+.logtools{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px}
+.logtools input,.logtools select{padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);min-width:0}
+.logtools input{flex:1 1 220px}
+details.comp{border-bottom:1px solid var(--line)}
+details.comp:last-of-type{border-bottom:0}
+details.comp summary{list-style:none;cursor:pointer;display:grid;grid-template-columns:6.6em minmax(0,1fr) auto;gap:6px 14px;padding:11px 16px;align-items:baseline}
+details.comp summary::-webkit-details-marker{display:none}
+details.comp summary:hover{background:var(--sunk)}
+details.comp[open] summary{background:var(--sunk)}
+.cdate{font-family:var(--f-mono);font-size:13px;color:var(--muted)}
+.cname{font-weight:500;min-width:0}
+.cname small{display:block;font-weight:400;color:var(--faint);font-size:12.5px}
+.cright{display:flex;gap:10px;align-items:center;font-size:12.5px;color:var(--muted);flex-wrap:wrap;justify-content:flex-end}
+.tag{font-size:11px;font-weight:700;letter-spacing:.04em;padding:1px 6px;border-radius:4px;background:var(--accent);color:#fff;font-family:var(--f-mono)}
+.tag.champ{background:transparent;color:var(--accent-ink);border:1px solid var(--accent)}
+.comp .inner{padding:4px 16px 14px;overflow-x:auto}
+.comp table td,.comp table th{padding:6px 8px;font-size:13.5px}
+.solves{font-family:var(--f-mono);font-size:12.5px;color:var(--muted);text-align:left!important}
+.solves .tr{color:var(--faint)}
+.more{display:flex;justify-content:center;padding:12px}
+@media (max-width:560px){details.comp summary{grid-template-columns:minmax(0,1fr) auto}.cdate{grid-column:1/-1}}
+
+/* record badges */
+.rec{display:inline-block;font:700 10.5px/1 var(--f-mono);letter-spacing:.03em;padding:3px 5px;border-radius:4px;color:#fff;vertical-align:1px;margin-left:5px}
+.rec-nr{background:var(--rec-nr)}.rec-cr{background:var(--rec-cr)}.rec-wr{background:var(--rec-wr)}
+.tag.pb{background:transparent;color:var(--accent-ink);border:1px solid var(--accent);padding:0 5px}
+.recnote{font-size:12.5px;color:var(--faint)}
+.recnote.err{color:var(--bad)}
+
+/* results history (WCA-style, newest first) */
+.histtools{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;margin-bottom:12px}
+.histtools select{padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface)}
+.hist-ev{margin-bottom:18px}
+.hist-ev h3{font:600 20px/1.2 var(--f-display);letter-spacing:.02em;margin:0;padding:12px 16px 10px;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;border-bottom:1px solid var(--line)}
+.hist-ev h3 small{font:400 12.5px var(--f-body);color:var(--muted)}
+.hist-ev table td,.hist-ev table th{padding:6px 10px;font-size:13.5px}
+.hist-ev tr.newcomp td{border-top:1px solid var(--line)}
+.hist-ev tbody tr:first-child td{border-top:0}
+.hist-ev td{border-bottom:0}
+.hist-ev td.comp{max-width:20em;overflow:hidden;text-overflow:ellipsis;font-weight:500}
+.hist-ev td.comp small{display:block;font:400 12px var(--f-mono);color:var(--faint)}
+.hist-ev tr.hasrec td{background:color-mix(in srgb, var(--rec-nr) 7%, transparent)}
+.hist-ev td.val{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+.hist-ev td.val b{font-weight:600}
+
+.intro{margin-top:20px;padding:20px 22px;max-width:44em}
+.intro h2{margin-bottom:8px}
+.intro p{margin:0 0 10px;color:var(--muted)}
+.intro ul{margin:0;padding-left:1.2em;color:var(--muted);display:grid;gap:4px;font-size:14px}
+
+footer{margin-top:48px;padding-top:16px;border-top:1px solid var(--line);color:var(--faint);font-size:12.5px;line-height:1.7}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="band">
+<div class="wrap">
+  <header class="top">
+    <div class="brand"><i aria-hidden="true"><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b><b></b></i>WCA Personal Stats</div>
+    <form class="search" id="searchForm" autocomplete="off">
+      <label for="q" class="sr" hidden>氏名またはWCA ID</label>
+      <input id="q" name="q" placeholder="氏名 または WCA ID" aria-label="氏名またはWCA ID">
+      <button type="submit">表示</button>
+    </form>
+  </header>
+</div>
+</div>
+<div class="wrap">
+  <div class="status" id="status" role="status" aria-live="polite"></div>
+  <div class="cands" id="cands"></div>
+
+  <div class="intro panel" id="intro">
+    <h2>選手を検索</h2>
+    <p>上の欄に<b>氏名</b>（ローマ字）か<b>WCA ID</b>（数字4桁＋英字4文字＋数字2桁）を入力して「表示」を押すと、その選手のWCA公式記録を取得して表示します。</p>
+    <ul>
+      <li>自己ベストと世界・大陸・国内ランキング、表彰台回数</li>
+      <li>種目ごとの記録の推移、ソルブ分布、記録ランキング Top 100</li>
+      <li>WCA個人ページと同じ形式の成績履歴（新しい順）と NR・CR・WR バッジ</li>
+      <li>年別・国別の参加大会数と、大会ごとの全記録</li>
+    </ul>
+  </div>
+
+  <main id="main" hidden>
+    <div class="profile">
+      <div>
+        <div class="eyebrow" id="pEyebrow"></div>
+        <h1 id="pName"></h1>
+        <div class="meta" id="pMeta"></div>
+      </div>
+      <div class="honors" id="pHonors"></div>
+    </div>
+    <div class="tiles" id="tiles"></div>
+
+    <section id="secPB">
+      <h2>自己ベストとランキング <small>行をクリックすると種目の詳細へ</small></h2>
+      <p class="lede">単発・平均のPBと世界/大陸/国内順位（WCA公式ランキング）。表彰台は決勝ラウンドでの1〜3位の回数です。</p>
+      <div class="panel scroll"><table id="pbTable"></table></div>
+    </section>
+
+    <section id="secEvent">
+      <h2 id="evTitle">種目の詳細</h2>
+      <div class="chips" id="evChips" role="group" aria-label="種目"></div>
+      <div class="evgrid">
+        <div class="panel box"><h3>成績サマリー</h3><dl class="stats" id="evStats"></dl></div>
+        <div class="panel">
+          <div class="rankhead">
+            <h3>記録ランキング Top 100</h3>
+            <div class="seg" id="rankSeg" role="group" aria-label="単発・平均の切り替え">
+              <button type="button" data-t="s" aria-pressed="true">単発 Single</button>
+              <button type="button" data-t="a" aria-pressed="false">平均 Average</button>
+            </div>
+            <span class="cnt" id="rankCount"></span>
+          </div>
+          <div class="rankwrap"><table id="rankTable"></table></div>
+          <div class="ranknote">この選手の全期間の公式記録を良い順に並べています。同記録は同順位、先に出した記録を上に表示。<span class="tag pb">PB</span> はその時点で自己ベストを更新した記録です。</div>
+        </div>
+      </div>
+      <div class="filterrow">
+        <div class="seg" id="rangeSeg" role="group" aria-label="期間">
+          <button type="button" data-r="0" aria-pressed="true">全期間</button>
+          <button type="button" data-r="3" aria-pressed="false">直近3年</button>
+          <button type="button" data-r="1" aria-pressed="false">直近1年</button>
+        </div>
+        <div class="legend" id="progLegend"></div>
+      </div>
+      <div class="charts">
+        <div class="panel chart"><h3 id="progTitle">記録の推移</h3><div id="progChart"></div></div>
+        <div class="panel chart"><h3 id="histTitle">ソルブ分布</h3><div id="histChart"></div></div>
+      </div>
+      <div class="panel scroll" style="margin-top:16px"><table id="yearTable"></table></div>
+    </section>
+
+    <section id="secAct">
+      <h2>大会参加の記録</h2>
+      <p class="lede">年ごとの参加大会数、訪れた国・地域、ハイライト。</p>
+      <div class="act">
+        <div class="panel chart"><h3>年別の参加大会数</h3><div id="yearChart"></div></div>
+        <div class="panel box"><h3>ハイライト</h3><ul class="hl" id="highlights"></ul></div>
+      </div>
+      <div class="panel box" style="margin-top:16px"><h3>国・地域別の参加大会数</h3><div class="ctry" id="countries"></div></div>
+    </section>
+
+    <section id="secHist">
+      <h2>種目別の成績履歴 <small id="histCount"></small></h2>
+      <p class="lede">WCAの個人ページと同じく、種目ごとに全ラウンドの記録を新しい順に並べています。<span class="rec rec-nr" style="margin-left:0">NR</span> 国内記録・<span class="rec rec-cr">AsR</span> 大陸記録（CR）・<span class="rec rec-wr">WR</span> 世界記録は、その記録を出した時点で樹立した公式記録です。 <span class="recnote" id="recNote"></span></p>
+      <div class="histtools">
+        <select id="histEvent" aria-label="種目"></select>
+        <select id="histShow" aria-label="表示する記録">
+          <option value="all">すべてのラウンド</option>
+          <option value="rec">NR・CR・WRのみ</option>
+          <option value="pb">PB更新のみ</option>
+          <option value="final">決勝のみ</option>
+        </select>
+      </div>
+      <div id="histList"></div>
+    </section>
+
+    <section id="secLog">
+      <h2>大会別の成績 <small id="logCount"></small></h2>
+      <p class="lede">大会名をクリックすると全ラウンドの記録を表示。Ao5の括弧は計算から除外されたソルブです。</p>
+      <div class="logtools">
+        <input id="logFilter" placeholder="大会名・都市で絞り込み" aria-label="大会名・都市で絞り込み">
+        <select id="logEvent" aria-label="種目で絞り込み"></select>
+        <select id="logYear" aria-label="年で絞り込み"></select>
+      </div>
+      <div class="panel" id="compLog"></div>
+      <div class="more"><button type="button" class="btn ghost" id="moreBtn" hidden>さらに表示</button></div>
+    </section>
+  </main>
+
+  <footer>
+    データ: World Cube Association の公開成績データ（<a href="https://github.com/robiningelbrecht/wca-rest-api" target="_blank" rel="noopener">wca-rest-api</a> によるミラー、通常1日1回更新）。名前検索は <a href="https://www.worldcubeassociation.org/" target="_blank" rel="noopener">WCA公式API</a> を使用。<br>
+    このページはWCAの公式サービスではありません。最新・正式な記録はWCA公式サイトの個人ページで確認してください。
+  </footer>
+</div>
+
+<script>
+"use strict";
+const DATA_SRC = "https://raw.githubusercontent.com/robiningelbrecht/wca-rest-api/v1/";
+const WCA_API = "https://www.worldcubeassociation.org/api/v0/";
+
+/* ---------- event & format helpers ---------- */
+const EVENTS = [
+  ["333","3x3x3","time"],["222","2x2x2","time"],["444","4x4x4","time"],["555","5x5x5","time"],
+  ["666","6x6x6","time"],["777","7x7x7","time"],["333bf","3x3x3 目隠し","time"],["333fm","3x3x3 最少手数","fm"],
+  ["333oh","3x3x3 片手","time"],["clock","クロック","time"],["minx","メガミンクス","time"],["pyram","ピラミンクス","time"],
+  ["skewb","スキューブ","time"],["sq1","スクエア1","time"],["444bf","4x4x4 目隠し","time"],["555bf","5x5x5 目隠し","time"],
+  ["333mbf","3x3x3 複数目隠し","mbf"],["333ft","3x3x3 足（廃止）","time"],["magic","マジック（廃止）","time"],
+  ["mmagic","マスターマジック（廃止）","time"],["333mbo","複数目隠し旧式（廃止）","mbf"]
+];
+const EVM = {}; EVENTS.forEach(([id,name,kind],i)=>EVM[id]={id,name,kind,order:i});
+const ev = id => EVM[id] || {id,name:id,kind:"time",order:99};
+const RO = {"Qualification round":0,"First round":1,"Second round":2,"Semi Final":3,"Final":4};
+const RJ = {"Qualification round":"予選","First round":"1回戦","Second round":"2回戦","Semi Final":"準決勝","Final":"決勝"};
+const FJ = {"Average of 5":"Ao5","Mean of 3":"Mo3","Best of 1":"Bo1","Best of 2":"Bo2","Best of 3":"Bo3","Best of 5":"Bo5"};
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const unitOf = id => ({fm:"手",mbf:"点"})[ev(id).kind] || "秒";
+
+function fmtCs(cs){
+  cs = Math.round(cs);
+  const h = Math.floor(cs/360000), m = Math.floor(cs%360000/6000), s = (cs%6000)/100;
+  if (h) return `${h}:${String(m).padStart(2,"0")}:${s.toFixed(2).padStart(5,"0")}`;
+  if (m) return `${m}:${s.toFixed(2).padStart(5,"0")}`;
+  return s.toFixed(2);
+}
+function fmtSec(sec){ const h=Math.floor(sec/3600), m=Math.floor(sec%3600/60), s=sec%60;
+  return h ? `${h}:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}` : `${m}:${String(s).padStart(2,"0")}`; }
+function decMbf(v){
+  const s = String(v);
+  if (s.length === 10 && s[0] === "1") { // old multi-blind format 1SSAATTTTT
+    const solved = 99 - +s.slice(1,3), att = +s.slice(3,5), time = +s.slice(5);
+    return {solved, attempted:att, missed:att-solved, points:solved-(att-solved), time};
+  }
+  const p = s.padStart(10,"0"); // 0DDTTTTTMM
+  const points = 99 - +p.slice(1,3), time = +p.slice(3,8), missed = +p.slice(8,10);
+  return {solved:points+missed, attempted:points+2*missed, missed, points, time};
+}
+function fmtVal(id, v, isAvg){
+  if (v === -1) return "DNF"; if (v === -2) return "DNS"; if (!v || v < 0) return "";
+  const k = ev(id).kind;
+  if (k === "fm") return isAvg ? (v/100).toFixed(2) : String(v);
+  if (k === "mbf") { const d = decMbf(v); return `${d.solved}/${d.attempted} ${d.time>=99999?"?":fmtSec(d.time)}`; }
+  return fmtCs(v);
+}
+function key(id, v){ // lower is better
+  if (!(v > 0)) return Infinity;
+  if (ev(id).kind === "mbf") { const d = decMbf(v); return (99-d.points)*1e8 + Math.min(d.time,99999)*100 + d.missed; }
+  return v;
+}
+function plotY(id, v, isAvg){
+  const k = ev(id).kind;
+  if (k === "mbf") return decMbf(v).points;
+  if (k === "fm") return isAvg ? v/100 : v;
+  return v/100;
+}
+function fmtPlot(id, y){ // value in plot units -> display
+  const k = ev(id).kind;
+  if (k === "mbf") return `${Math.round(y*10)/10}点`;
+  if (k === "fm") return `${Math.round(y*100)/100}手`;
+  return fmtCs(y*100);
+}
+function tickLabel(id, y){
+  const k = ev(id).kind;
+  if (k === "mbf" || k === "fm") return String(+y.toFixed(2));
+  if (y >= 60) { const m = Math.floor(y/60), s = Math.round(y%60); return `${m}:${String(s).padStart(2,"0")}`; }
+  return String(+y.toFixed(2));
+}
+const pct = (a,b) => b ? (100*a/b) : 0;
+const fmtNum = n => n.toLocaleString("ja-JP");
+const regionName = (() => {
+  let dn = null; try { dn = new Intl.DisplayNames(["ja"],{type:"region"}); } catch(e){}
+  const multi = {XA:"アジア（複数会場）",XE:"ヨーロッパ（複数会場）",XF:"アフリカ（複数会場）",XM:"アメリカ大陸（複数会場）",XN:"北米（複数会場）",XO:"オセアニア（複数会場）",XS:"南米（複数会場）",XW:"世界（複数会場）"};
+  return c => multi[c] || (dn && c ? (()=>{ try { return dn.of(c); } catch(e){ return c; } })() : (c||"不明"));
+})();
+const isMulti = c => /^X[A-Z]$/.test(c||"");
+function fallbackDate(cid){ const m = cid.match(/(\d{4})$/); return m ? `${m[1]}-07-01` : "1900-01-01"; }
+
+/* ---------- data loading ---------- */
+const compCache = {};
+function cacheGet(id){ if (compCache[id]) return compCache[id]; try { const s = localStorage.getItem("wca-comp-v1:"+id); if (s) return compCache[id] = JSON.parse(s); } catch(e){} return null; }
+function cachePut(id, m){ compCache[id] = m; try { localStorage.setItem("wca-comp-v1:"+id, JSON.stringify(m)); } catch(e){} }
+
+async function fetchJSON(url){
+  const res = await fetch(url, {cache:"no-cache"});
+  if (!res.ok) { const err = new Error("HTTP "+res.status); err.status = res.status; throw err; }
+  return res.json();
+}
+async function loadComps(ids, onProgress){
+  const out = {}; const todo = [];
+  ids.forEach(id => { const c = cacheGet(id); if (c) out[id] = c; else todo.push(id); });
+  let done = ids.length - todo.length; onProgress(done, ids.length);
+  let i = 0;
+  async function worker(){
+    while (i < todo.length) {
+      const id = todo[i++];
+      try {
+        const j = await fetchJSON(DATA_SRC + "competitions/" + encodeURIComponent(id) + ".json");
+        const m = {name:j.name, city:j.city, country:j.country, date:j.date?.from, end:j.date?.till};
+        cachePut(id, m); out[id] = m;
+      } catch(e) { out[id] = null; }
+      onProgress(++done, ids.length);
+    }
+  }
+  await Promise.all(Array.from({length:Math.min(10, todo.length)}, worker));
+  return out;
+}
+
+function setStatus(html, isErr){ const s = $("#status"); s.innerHTML = html; s.classList.toggle("err", !!isErr); }
+
+let loadToken = 0;
+async function loadId(id){
+  const my = ++loadToken;
+  $("#cands").innerHTML = "";
+  setStatus(`<span>${esc(id)} の成績を取得中…</span>`);
+  let person;
+  try { person = await fetchJSON(DATA_SRC + "persons/" + encodeURIComponent(id) + ".json"); }
+  catch(e) {
+    if (my !== loadToken) return;
+    if (e.status === 404) setStatus(`WCA ID「${esc(id)}」は見つかりませんでした。IDの綴りを確認するか、氏名で検索してください（登録直後の選手はデータ反映まで1日ほどかかることがあります）。`, true);
+    else setStatus(`データを取得できませんでした（${esc(e.message)}）。インターネット接続を確認して、もう一度お試しください。`, true);
+    return;
+  }
+  if (my !== loadToken) return;
+  loadRecords(person.id);
+  const ids = Object.keys(person.results || {});
+  const comps = await loadComps(ids, (d,n) => {
+    if (my !== loadToken) return;
+    setStatus(`<span>${esc(person.name)} の大会情報を取得中</span><span class="bar"><span style="width:${pct(d,n)}%"></span></span><span class="mono">${d}/${n}</span>`);
+  });
+  if (my !== loadToken) return;
+  const missing = ids.filter(i => !comps[i]).length;
+  render(person, comps);
+  setStatus(`<span>${esc(person.name)}（${esc(person.id)}）を表示中</span>` + (missing ? `<span>※ ${missing}大会の開催日を取得できず、年のみで並べています</span>` : "")
+    + `<button type="button" class="btn ghost" id="refreshBtn" data-id="${esc(person.id)}">再読み込み</button>`);
+  try { localStorage.setItem("wca-last-id", person.id); } catch(e){}
+  try { history.replaceState(null, "", location.pathname + "?id=" + encodeURIComponent(person.id)); } catch(e){}
+}
+
+async function onSearch(q){
+  q = q.trim(); if (!q) return;
+  if (/^\d{4}[a-z]{4}\d{2}$/i.test(q)) return loadId(q.toUpperCase());
+  const my = ++loadToken;
+  $("#cands").innerHTML = "";
+  setStatus(`「${esc(q)}」を検索中…`);
+  let list = [];
+  try {
+    const j = await fetchJSON(WCA_API + "search/users?persons_table=true&q=" + encodeURIComponent(q));
+    const arr = Array.isArray(j) ? j : (j.result || []);
+    const seen = new Set();
+    for (const x0 of arr) {
+      const x = x0.person || x0;
+      const id = x.wca_id || x.id;
+      if (typeof id !== "string" || !/^\d{4}[A-Z]{4}\d{2}$/.test(id) || seen.has(id)) continue;
+      seen.add(id); list.push({id, name:x.name, country:x.country_iso2 || x.country?.iso2 || ""});
+    }
+  } catch(e) {
+    if (my !== loadToken) return;
+    setStatus("名前検索（WCA公式API）に接続できませんでした。WCA ID（数字4桁＋英字4文字＋数字2桁の10文字）を直接入力してください。", true);
+    return;
+  }
+  if (my !== loadToken) return;
+  if (!list.length) { setStatus(`「${esc(q)}」に一致する選手は見つかりませんでした。ローマ字表記やWCA IDでもお試しください。`, true); return; }
+  if (list.length === 1) return loadId(list[0].id);
+  setStatus(`「${esc(q)}」の候補 ${list.length}件。選手を選んでください。`);
+  $("#cands").innerHTML = list.slice(0,30).map(p => `<button type="button" data-id="${esc(p.id)}">${esc(p.name)}<small>${esc(p.id)} · ${esc(regionName(p.country))}</small></button>`).join("");
+}
+
+/* ---------- regional record markers (WCA official API) ---------- */
+let RECS = {id:null, state:"idle", map:null};
+const recKey = (cid, eid, best, avg) => `${cid}|${eid}|${best}|${avg}`;
+function recClass(code){ return code === "WR" ? "wr" : code === "NR" ? "nr" : "cr"; }
+function badge(code){ return code ? `<span class="rec rec-${recClass(code)}" title="${code === "WR" ? "世界記録" : code === "NR" ? "国内記録" : "大陸記録"}">${esc(code)}</span>` : ""; }
+async function loadRecords(id){
+  RECS = {id, state:"loading", map:null}; updateRecNote();
+  try {
+    const arr = await fetchJSON(WCA_API + "persons/" + encodeURIComponent(id) + "/results");
+    if (RECS.id !== id) return;
+    const map = new Map();
+    for (const x of (Array.isArray(arr) ? arr : [])) {
+      if (!x.regional_single_record && !x.regional_average_record) continue;
+      map.set(recKey(x.competition_id, x.event_id, x.best, x.average), {s:x.regional_single_record || null, a:x.regional_average_record || null});
+    }
+    RECS = {id, state:"ok", map};
+  } catch(e) {
+    if (RECS.id !== id) return;
+    RECS = {id, state:"error", map:null};
+  }
+  if (STATE && STATE.person.id === id) { applyRecs(); renderRecordViews(); }
+  updateRecNote();
+}
+function applyRecs(){
+  if (!STATE) return;
+  const ok = RECS.state === "ok" && RECS.id === STATE.person.id;
+  for (const r of STATE.rounds) {
+    const m = ok ? RECS.map.get(recKey(r.cid, r.eid, r.best, r.average)) : null;
+    r.recS = m?.s || null; r.recA = m?.a || null;
+  }
+}
+function updateRecNote(){
+  const n = $("#recNote"); if (!n) return;
+  n.classList.toggle("err", RECS.state === "error");
+  if (RECS.state === "loading") n.textContent = "記録バッジをWCA公式APIから取得中…";
+  else if (RECS.state === "error") n.textContent = "WCA公式APIに接続できなかったため、NR・CR・WRバッジは表示されていません。";
+  else if (RECS.state === "ok" && STATE) { const c = STATE.rounds.reduce((a,r) => a + (r.recS?1:0) + (r.recA?1:0), 0); n.textContent = `記録バッジ: ${c}件（WCA公式APIより取得）`; }
+  else n.textContent = "";
+}
+function renderRecordViews(){ renderRanking(); renderHistory(); renderLog(); }
+
+/* ---------- analysis ---------- */
+function analyze(person, comps){
+  const rounds = [];
+  for (const [cid, evs] of Object.entries(person.results || {})) {
+    const m = comps[cid] || null;
+    const date = m?.date || fallbackDate(cid);
+    for (const [eid, rs] of Object.entries(evs)) for (const r of rs)
+      rounds.push({cid, m, date, eid, round:r.round, ro:RO[r.round] ?? 2, position:r.position, best:r.best, average:r.average, format:r.format, solves:r.solves || []});
+  }
+  rounds.sort((a,b) => a.date.localeCompare(b.date) || a.cid.localeCompare(b.cid) || ev(a.eid).order - ev(b.eid).order || a.ro - b.ro);
+  const E = {}; const pbRound = new Map();
+  let valid = 0, dnf = 0, dns = 0, timeSum = 0;
+  for (const r of rounds) {
+    const e = E[r.eid] ??= {eid:r.eid, rounds:[], solves:[], dnf:0, dns:0, finals:0, pod:[0,0,0], pbS:[], pbA:[], comps:new Set(), years:{}};
+    e.rounds.push(r); e.comps.add(r.cid);
+    if (r.round === "Final") { e.finals++; if (r.best > 0 && r.position >= 1 && r.position <= 3) e.pod[r.position-1]++; }
+    const y = r.date.slice(0,4);
+    const Y = e.years[y] ??= {rounds:0, valid:0, att:0, sum:0, bestS:null, bestA:null};
+    Y.rounds++;
+    for (const [i, s] of r.solves.entries()) {
+      if (s > 0) { e.solves.push({v:s, r, i}); valid++; Y.valid++; Y.att++; Y.sum += plotY(r.eid, s, false); if (ev(r.eid).kind === "time") timeSum += s; }
+      else if (s === -1) { e.dnf++; dnf++; Y.att++; }
+      else if (s === -2) { e.dns++; dns++; }
+    }
+    if (r.best > 0) {
+      const last = e.pbS.at(-1);
+      if (!last || key(r.eid, r.best) < key(r.eid, last.v)) { e.pbS.push({v:r.best, r}); pbRound.set(r, (pbRound.get(r)||"") + "S"); }
+      if (Y.bestS === null || key(r.eid, r.best) < key(r.eid, Y.bestS)) Y.bestS = r.best;
+    }
+    if (r.average > 0) {
+      const last = e.pbA.at(-1);
+      if (!last || key(r.eid, r.average) < key(r.eid, last.v)) { e.pbA.push({v:r.average, r}); pbRound.set(r, (pbRound.get(r)||"") + "A"); }
+      if (Y.bestA === null || key(r.eid, r.average) < key(r.eid, Y.bestA)) Y.bestA = r.average;
+    }
+  }
+  // competitions
+  const compList = Object.keys(person.results || {}).map(cid => {
+    const m = comps[cid];
+    const rs = rounds.filter(r => r.cid === cid);
+    return {cid, m, date:m?.date || fallbackDate(cid), name:m?.name || cid, city:m?.city || "", country:m?.country || "", rounds:rs};
+  }).sort((a,b) => b.date.localeCompare(a.date));
+  return {rounds, E, pbRound, compList, totals:{valid, dnf, dns, timeSum}};
+}
+
+/* ---------- rendering ---------- */
+let STATE = null;
+function render(person, comps){
+  const A = analyze(person, comps);
+  const evIds = Object.keys(A.E).sort((a,b) => ev(a).order - ev(b).order);
+  const prevEid = STATE && STATE.person.id === person.id ? STATE.eid : null;
+  STATE = {person, comps, ...A, evIds, eid: prevEid && A.E[prevEid] ? prevEid : (A.E["333"] ? "333" : evIds[0]), range:0, logShown:20, rankType: STATE?.rankType || "s"};
+  $("#main").hidden = false;
+  $("#intro").hidden = true;
+  document.title = `${person.name.replace(/\s*\(.*\)$/,"")} — WCA 個人成績ビューア`;
+  applyRecs();
+  renderProfile(); renderTiles(); renderPB(); renderChips(); renderEvent(); renderActivity(); initHistFilters(); renderHistory(); initLogFilters(); renderLog(); updateRecNote();
+}
+
+function renderProfile(){
+  const {person, compList} = STATE;
+  const first = compList.at(-1), last = compList[0];
+  $("#pEyebrow").textContent = regionName(person.country);
+  $("#pName").textContent = person.name;
+  $("#pMeta").innerHTML = `<a class="idpill" href="https://www.worldcubeassociation.org/persons/${esc(person.id)}" target="_blank" rel="noopener">${esc(person.id)}</a>`
+    + (first ? `<span>${esc(first.date.slice(0,7).replace("-","年"))}月 初出場</span><span>最新 ${esc(last.date)}</span>` : "");
+  const md = person.medals || {}, rc = person.records || {};
+  const recSum = t => ((rc.single||{})[t]||0) + ((rc.average||{})[t]||0);
+  const recDetail = t => `単発${(rc.single||{})[t]||0}・平均${(rc.average||{})[t]||0}`;
+  let h = [["gold","金"],["silver","銀"],["bronze","銅"]].map(([c,l]) =>
+    `<div class="honor"><span class="disc d-${c}">${md[c]||0}</span><small>${l}メダル</small></div>`).join("");
+  for (const t of ["WR","CR","NR"]) if (recSum(t)) h += `<div class="honor" title="${recDetail(t)}"><span class="disc d-rec">${recSum(t)}</span><small>${t}</small></div>`;
+  $("#pHonors").innerHTML = h;
+}
+
+function renderTiles(){
+  const {person, compList, totals, evIds} = STATE;
+  const countries = new Set(compList.map(c => c.country).filter(c => c && !isMulti(c)));
+  const hours = totals.timeSum/100/3600;
+  const tiles = [
+    ["参加大会", fmtNum(person.numberOfCompetitions ?? compList.length), `選手権 ${person.numberOfChampionships ?? 0}`],
+    ["出場種目", evIds.length, `${fmtNum(STATE.rounds.length)} ラウンド`],
+    ["有効ソルブ", fmtNum(totals.valid), `DNF ${fmtNum(totals.dnf)}`],
+    ["成功率", pct(totals.valid, totals.valid + totals.dnf).toFixed(1) + "%", "DNSを除く"],
+    ["競技タイム合計", hours >= 1 ? hours.toFixed(1) + "h" : Math.round(hours*60) + "分", "成功ソルブの合計"],
+    ["国・地域", countries.size, `${new Set(compList.map(c=>c.city).filter(Boolean)).size} 都市`]
+  ];
+  $("#tiles").innerHTML = tiles.map(([k,v,s]) => `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s}</div></div>`).join("");
+}
+
+function rankCells(r){
+  if (!r) return `<td class="num bl"></td><td class="num"></td><td class="num"></td>`;
+  const c = n => n == null ? `<span class="zero">–</span>` : (n <= 10 ? `<span class="nr">${n}</span>` : fmtNum(n));
+  return `<td class="num rk">${c(r.world)}</td><td class="num rk">${c(r.continent)}</td><td class="num rk">${c(r.country)}</td>`;
+}
+function podHTML(p){
+  const cls = ["gold","silver","bronze"];
+  return `<span class="pods">${p.map((n,i) => `<span class="${n?"":"zero"}"><i class="d-${cls[i]}" aria-hidden="true"></i><span>${n}</span></span>`).join("")}</span>`;
+}
+function renderPB(){
+  const {person, E, evIds} = STATE;
+  const rS = {}, rA = {};
+  (person.rank?.singles || []).forEach(x => rS[x.eventId] = x);
+  (person.rank?.averages || []).forEach(x => rA[x.eventId] = x);
+  const ids = [...new Set([...evIds, ...Object.keys(rS)])].sort((a,b) => ev(a).order - ev(b).order);
+  let h = `<thead><tr><th class="l" rowspan="2">種目</th><th class="grp" colspan="4">単発</th><th class="grp" colspan="4">平均</th><th class="bl" rowspan="2">大会</th><th rowspan="2">表彰台<br>金・銀・銅</th></tr>
+  <tr><th class="bl">記録</th><th>世界</th><th>大陸</th><th>国内</th><th class="bl">記録</th><th>世界</th><th>大陸</th><th>国内</th></tr></thead><tbody>`;
+  for (const id of ids) {
+    const e = E[id]; const s = rS[id], a = rA[id];
+    const bestS = s?.best ?? e?.pbS.at(-1)?.v, bestA = a?.best ?? e?.pbA.at(-1)?.v;
+    h += `<tr data-eid="${esc(id)}" class="${id===STATE.eid?"sel":""}" tabindex="0"><td class="l"><span class="evname">${esc(ev(id).name)}</span></td>
+      <td class="num bl"><b>${bestS ? fmtVal(id, bestS, false) : ""}</b></td>${s ? rankCells(s.rank) : '<td></td><td></td><td></td>'}
+      <td class="num bl"><b>${bestA ? fmtVal(id, bestA, true) : ""}</b></td>${a ? rankCells(a.rank) : '<td></td><td></td><td></td>'}
+      <td class="num bl">${e ? e.comps.size : ""}</td><td>${e ? podHTML(e.pod) : ""}</td></tr>`;
+  }
+  $("#pbTable").innerHTML = h + "</tbody>";
+}
+
+function renderChips(){
+  $("#evChips").innerHTML = STATE.evIds.map(id => `<button type="button" class="chip" data-eid="${esc(id)}" aria-pressed="${id===STATE.eid}">${esc(ev(id).name)}</button>`).join("");
+}
+function selectEvent(id, scroll){
+  if (!STATE.E[id]) return;
+  STATE.eid = id;
+  document.querySelectorAll("#evChips .chip").forEach(b => b.setAttribute("aria-pressed", b.dataset.eid === id));
+  document.querySelectorAll("#pbTable tbody tr").forEach(tr => tr.classList.toggle("sel", tr.dataset.eid === id));
+  renderEvent();
+  if (scroll) $("#secEvent").scrollIntoView({behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block:"start"});
+}
+
+function median(arr){ if (!arr.length) return null; const a = [...arr].sort((x,y)=>x-y); const m = a.length>>1; return a.length%2 ? a[m] : (a[m-1]+a[m])/2; }
+function compLabel(r){ return r.m?.name || r.cid; }
+
+function renderEvent(){
+  const {E, eid} = STATE; const e = E[eid]; const name = ev(eid).name; const kind = ev(eid).kind;
+  $("#evTitle").textContent = `${name} の詳細`;
+  const vals = e.solves.map(s => plotY(eid, s.v, false));
+  const mean = vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : null;
+  const med = median(vals);
+  const firstA = e.pbA[0], pbA = e.pbA.at(-1);
+  const improve = firstA && pbA && firstA !== pbA ? (() => {
+    const a = plotY(eid, firstA.v, true), b = plotY(eid, pbA.v, true);
+    return kind === "mbf" ? `${fmtPlot(eid,a)} → ${fmtPlot(eid,b)}` : `${fmtVal(eid,firstA.v,true)} → ${fmtVal(eid,pbA.v,true)}（−${(100*(a-b)/a).toFixed(1)}%）`;
+  })() : "–";
+  const lastR = e.rounds.at(-1);
+  const rows = [
+    ["出場大会 / ラウンド", `${e.comps.size} / ${e.rounds.length}`],
+    ["決勝進出", `${e.finals} 回`],
+    ["表彰台（金・銀・銅）", `${e.pod.join("・")}`],
+    ["有効ソルブ", fmtNum(vals.length)],
+    ["DNF / DNS", `${e.dnf} / ${e.dns}`],
+    ["成功率", `${pct(vals.length, vals.length + e.dnf).toFixed(1)}%`],
+    [kind === "mbf" ? "成功時の平均ポイント" : "全成功ソルブの平均", mean == null ? "–" : fmtPlot(eid, mean)],
+    ["中央値", med == null ? "–" : fmtPlot(eid, med)],
+    ["PB更新回数（単発 / 平均）", `${e.pbS.length} / ${e.pbA.length}`],
+    ["初の平均 → 平均PB", improve],
+    ["最終出場", lastR ? lastR.date : "–"]
+  ];
+  $("#evStats").innerHTML = rows.map(([k,v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join("");
+
+  renderRanking();
+
+  renderYearTable();
+  drawProg(); drawHist();
+}
+
+function renderRanking(){
+  const {E, eid} = STATE; const e = E[eid];
+  const avgRounds = e.rounds.filter(r => r.average > 0);
+  const btnA = document.querySelector('#rankSeg button[data-t="a"]');
+  btnA.disabled = !avgRounds.length;
+  btnA.textContent = avgRounds.length && avgRounds.every(r => r.format === "Mean of 3") ? "平均 Mean" : "平均 Average";
+  btnA.title = avgRounds.length ? "" : "この種目には平均記録がありません";
+  const t = avgRounds.length ? STATE.rankType : "s";
+  document.querySelectorAll("#rankSeg button").forEach(b => b.setAttribute("aria-pressed", b.dataset.t === t));
+  const pbS = new Map(e.pbS.map(p => [p.r, p.v])), pbA = new Map(e.pbA.map(p => [p.r, p.v]));
+  let items;
+  if (t === "s") items = e.solves.map(s => ({v:s.v, r:s.r, i:s.i, pb: pbS.get(s.r) === s.v && s.r.best === s.v}));
+  else items = avgRounds.map(r => ({v:r.average, r, pb: pbA.has(r)}));
+  // the earliest equal solve within a round is the one that set the PB
+  if (t === "s") {
+    const seen = new Set(); items.forEach(x => { if (x.pb) { if (seen.has(x.r)) x.pb = false; else seen.add(x.r); } });
+    const firstBest = new Set(); items.forEach(x => { if (x.v === x.r.best && !firstBest.has(x.r)) { firstBest.add(x.r); x.first = true; } });
+  }
+  items.sort((a,b) => key(eid,a.v) - key(eid,b.v) || a.r.date.localeCompare(b.r.date) || a.r.ro - b.r.ro || (a.i ?? 0) - (b.i ?? 0));
+  let prevK = null, rank = 0;
+  items.forEach((x, n) => { const k = key(eid, x.v); if (k !== prevK) { rank = n + 1; prevK = k; } x.rank = rank; });
+  const top = items.slice(0, 100);
+  const unit = t === "s" ? "ソルブ" : "回";
+  $("#rankCount").textContent = items.length ? `全${fmtNum(items.length)}${unit}中 上位${top.length}件` : "";
+  const isAvg = t === "a";
+  let h = `<thead><tr><th class="l">順位</th><th>${isAvg ? "平均" : "単発"}</th><th class="l">日付</th><th class="l">大会</th><th class="l">ラウンド</th><th class="l">${isAvg ? "内訳" : "試技"}</th></tr></thead><tbody>`;
+  h += top.map(x => {
+    const r = x.r;
+    const detail = isAvg ? `<td class="solves">${solvesHTML(r)}</td>` : `<td class="l num">${(x.i ?? 0) + 1}本目 <span class="zero">/ ${r.solves.filter(v => v !== 0).length}</span></td>`;
+    return `<tr class="${x.rank <= 3 ? "top3" : ""}"><td class="pos l">${x.rank}</td><td class="val">${esc(fmtVal(eid, x.v, isAvg))}${badge(isAvg ? r.recA : (x.first ? r.recS : null))}${x.pb ? ' <span class="tag pb">PB</span>' : ""}</td>
+      <td class="l num">${esc(r.date)}</td><td class="l cmp" title="${esc(compLabel(r))}">${esc(compLabel(r))}</td>
+      <td class="l">${esc(RJ[r.round] || r.round)} <span class="zero">${esc(FJ[r.format] || "")}</span></td>${detail}</tr>`;
+  }).join("");
+  if (!top.length) h += `<tr><td class="l" colspan="6"><span class="zero">記録なし</span></td></tr>`;
+  $("#rankTable").innerHTML = h + "</tbody>";
+  document.querySelector(".rankwrap").scrollTop = 0;
+}
+
+function renderYearTable(){
+  const {E, eid} = STATE; const e = E[eid];
+  const ys = Object.keys(e.years).sort().reverse();
+  let h = `<thead><tr><th class="l">年</th><th>ラウンド</th><th>有効ソルブ</th><th>成功率</th><th>${ev(eid).kind==="mbf"?"平均ポイント":"ソルブ平均"}</th><th>年間ベスト単発</th><th>年間ベスト平均</th></tr></thead><tbody>`;
+  for (const y of ys) {
+    const Y = e.years[y];
+    h += `<tr><td class="l num">${y}</td><td class="num">${Y.rounds}</td><td class="num">${Y.valid}</td><td class="num">${Y.att ? pct(Y.valid,Y.att).toFixed(0)+"%" : "–"}</td>
+      <td class="num">${Y.valid ? esc(fmtPlot(eid, Y.sum/Y.valid)) : "–"}</td><td class="num">${Y.bestS ? esc(fmtVal(eid,Y.bestS,false)) : "–"}</td><td class="num">${Y.bestA ? esc(fmtVal(eid,Y.bestA,true)) : "–"}</td></tr>`;
+  }
+  $("#yearTable").innerHTML = h + "</tbody>";
+}
+
+/* ---------- charts (hand-built SVG) ---------- */
+function niceStep(raw){ const mag = 10 ** Math.floor(Math.log10(raw)); const f = raw/mag; return (f >= 7.5 ? 10 : f >= 3.5 ? 5 : f >= 2.25 ? 2.5 : f >= 1.5 ? 2 : 1) * mag; }
+function niceTicks(lo, hi, n){
+  if (lo === hi) { lo -= 1; hi += 1; }
+  const step = niceStep((hi-lo)/n);
+  const a = Math.floor(lo/step)*step, b = Math.ceil(hi/step)*step; const t = [];
+  for (let v = a; v <= b + step/2; v += step) t.push(+v.toFixed(10));
+  return {lo:a, hi:b, ticks:t};
+}
+const day = 864e5;
+const toT = d => Date.parse(d + "T00:00:00Z");
+function rangeStart(){
+  if (!STATE.range) return null;
+  const last = STATE.rounds.at(-1).date; const d = new Date(toT(last)); d.setUTCFullYear(d.getUTCFullYear() - STATE.range);
+  return d.toISOString().slice(0,10);
+}
+function tipAt(wrap, html, x, y){
+  let t = wrap.querySelector(".tip"); if (!t) { t = document.createElement("div"); t.className = "tip"; wrap.appendChild(t); }
+  t.innerHTML = html; t.hidden = false;
+  const W = wrap.clientWidth; const tw = t.offsetWidth, th = t.offsetHeight;
+  let left = x + 14; if (left + tw > W - 4) left = x - tw - 14; if (left < 4) left = 4;
+  let top = y - th - 10; if (top < 0) top = y + 14;
+  t.style.left = left + "px"; t.style.top = top + "px";
+}
+function hideTip(wrap){ const t = wrap.querySelector(".tip"); if (t) t.hidden = true; }
+
+function drawProg(){
+  const {E, eid} = STATE; const e = E[eid]; const el = $("#progChart"); const wrap = el.parentElement;
+  const hasAvg = e.pbA.length > 0;
+  $("#progLegend").innerHTML = `<span><i style="background:var(--accent)"></i>単発PB</span>` + (hasAvg ? `<span><i style="background:var(--avg)"></i>平均PB</span>` : "")
+    + `<span><i class="dot" style="background:var(--accent)"></i>各ラウンドの単発</span>` + (hasAvg ? `<span><i class="dot" style="background:var(--avg)"></i>各ラウンドの平均</span>` : "");
+  $("#progTitle").textContent = `記録の推移（${unitOf(eid)}${ev(eid).kind==="mbf" ? "・上ほど良い" : "・下ほど速い"}）`;
+  const from = rangeStart();
+  const rs = e.rounds.filter(r => !from || r.date >= from);
+  if (!rs.length) { el.innerHTML = `<p class="note">この期間に出場記録はありません。</p>`; return; }
+  const W = Math.max(280, el.clientWidth), H = W < 520 ? 230 : 290;
+  const M = {l:46, r:50, t:10, b:24};
+  const pts = [];
+  for (const r of rs) {
+    if (r.best > 0) pts.push({t:toT(r.date), y:plotY(eid, r.best, false), k:"s", r});
+    if (r.average > 0) pts.push({t:toT(r.date), y:plotY(eid, r.average, true), k:"a", r});
+  }
+  const lastT = toT(STATE.rounds.at(-1).date);
+  function seq(list, isAvg){
+    const out = []; let prior = null;
+    for (const p of list) { if (from && p.r.date < from) { prior = p; continue; } out.push(p); }
+    const s = []; if (prior) s.push({t:toT(from), y:plotY(eid, prior.v, isAvg), p:prior, carry:true});
+    out.forEach(p => s.push({t:toT(p.r.date), y:plotY(eid, p.v, isAvg), p}));
+    return s;
+  }
+  const sS = seq(e.pbS, false), sA = seq(e.pbA, true);
+  let t0 = from ? toT(from) : Math.min(...pts.map(p=>p.t)), t1 = lastT;
+  if (t1 - t0 < 60*day) { t0 -= 30*day; t1 += 30*day; }
+  const ys = [...pts.map(p=>p.y), ...sS.map(p=>p.y), ...sA.map(p=>p.y)];
+  const yt = niceTicks(Math.min(...ys), Math.max(...ys), 5);
+  const X = t => M.l + (t - t0) / (t1 - t0) * (W - M.l - M.r);
+  const Y = y => M.t + (1 - (y - yt.lo) / (yt.hi - yt.lo)) * (H - M.t - M.b);
+  // x ticks
+  const y0 = new Date(t0).getUTCFullYear(), y1 = new Date(t1).getUTCFullYear();
+  let xt = [];
+  if (y1 - y0 >= 2) { const every = Math.ceil((y1 - y0 + 1) / Math.max(2, Math.floor((W-60)/56))); for (let y = y0; y <= y1; y++) { const t = Date.UTC(y,0,1); if (t >= t0 && t <= t1 && (y - y0) % every === 0) xt.push([t, String(y)]); } if (!xt.length) xt.push([t0, String(y0)]); }
+  else { const d = new Date(t0); d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth()+1); const step = W < 520 ? 3 : 2; while (d.getTime() <= t1) { if (d.getUTCMonth() % step === 0) xt.push([d.getTime(), `${d.getUTCFullYear()}/${d.getUTCMonth()+1}`]); d.setUTCMonth(d.getUTCMonth()+1); } }
+  const stepPath = s => { if (!s.length) return ""; let d = `M${X(s[0].t).toFixed(1)},${Y(s[0].y).toFixed(1)}`; for (let i = 1; i < s.length; i++) d += `H${X(s[i].t).toFixed(1)}V${Y(s[i].y).toFixed(1)}`; return d + `H${X(t1).toFixed(1)}`; };
+  let svg = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="${esc(ev(eid).name)}の記録推移">`;
+  svg += `<g class="grid">${yt.ticks.map(v => `<line x1="${M.l}" x2="${W-M.r}" y1="${Y(v)}" y2="${Y(v)}"/>`).join("")}</g>`;
+  svg += `<g class="axis">${yt.ticks.map(v => `<text x="${M.l-6}" y="${Y(v)+4}" text-anchor="end">${tickLabel(eid, v)}</text>`).join("")}`;
+  svg += xt.map(([t,l]) => `<text x="${X(t)}" y="${H-6}" text-anchor="middle">${l}</text>`).join("") + `</g>`;
+  svg += pts.map(p => `<circle cx="${X(p.t).toFixed(1)}" cy="${Y(p.y).toFixed(1)}" r="2.6" fill="${p.k==="s"?"var(--accent)":"var(--avg)"}" fill-opacity=".32"/>`).join("");
+  if (sA.length) svg += `<path d="${stepPath(sA)}" fill="none" stroke="var(--avg)" stroke-width="2" stroke-linejoin="round"/>`;
+  svg += `<path d="${stepPath(sS)}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round"/>`;
+  for (const [s,c] of [[sA,"var(--avg)"],[sS,"var(--accent)"]]) svg += s.filter(p=>!p.carry).map(p => `<circle cx="${X(p.t).toFixed(1)}" cy="${Y(p.y).toFixed(1)}" r="4" fill="${c}" stroke="var(--surface)" stroke-width="2"/>`).join("");
+  // endpoint labels for current PBs, placed in the right margin and kept apart
+  const labs = [];
+  if (sS.length) labs.push({y:Y(sS.at(-1).y), txt:fmtVal(eid, sS.at(-1).p.v, false), c:"var(--accent)"});
+  if (sA.length) labs.push({y:Y(sA.at(-1).y), txt:fmtVal(eid, sA.at(-1).p.v, true), c:"var(--avg)"});
+  labs.sort((a,b) => a.y - b.y);
+  if (labs.length === 2 && labs[1].y - labs[0].y < 14) { const mid = (labs[0].y + labs[1].y)/2; labs[0].y = mid - 7; labs[1].y = mid + 7; }
+  svg += labs.map(l => `<text x="${X(t1)+6}" y="${l.y+4}" style="fill:var(--ink);font:600 11px var(--f-mono)">${esc(l.txt)}</text>`).join("");
+  svg += `<circle id="progHi" r="6" fill="none" stroke="var(--ink)" stroke-width="2" visibility="hidden"/>`;
+  svg += `<rect x="${M.l}" y="0" width="${W-M.l-M.r}" height="${H-M.b}" fill="transparent" id="progHit"/></svg>`;
+  el.innerHTML = svg;
+  const hit = el.querySelector("#progHit"), hi = el.querySelector("#progHi");
+  const P = pts.map(p => ({...p, px:X(p.t), py:Y(p.y)}));
+  hit.addEventListener("pointermove", ev2 => {
+    const box = el.querySelector("svg").getBoundingClientRect(); const sx = W / box.width;
+    const mx = (ev2.clientX - box.left) * sx, my = (ev2.clientY - box.top) * sx;
+    let best = null, bd = Infinity;
+    for (const p of P) { const d = (p.px-mx)**2 + ((p.py-my)*0.6)**2; if (d < bd) { bd = d; best = p; } }
+    if (!best || bd > 50*50) { hi.setAttribute("visibility","hidden"); hideTip(wrap); return; }
+    hi.setAttribute("cx", best.px); hi.setAttribute("cy", best.py); hi.setAttribute("visibility","visible");
+    const r = best.r; const tag = STATE.pbRound.get(r) || "";
+    const wr = wrap.getBoundingClientRect();
+    tipAt(wrap, `<div class="t">${esc(r.date)} · ${esc(RJ[r.round]||r.round)}</div><div>${esc(compLabel(r))}</div>
+      <div>単発 <b>${esc(fmtVal(eid,r.best,false))}</b>${tag.includes("S")?" ★PB":""}${r.average>0?` / 平均 <b>${esc(fmtVal(eid,r.average,true))}</b>${tag.includes("A")?" ★PB":""}`:""}</div>
+      <div class="t">${r.position}位</div>`, ev2.clientX - wr.left, ev2.clientY - wr.top);
+  });
+  hit.addEventListener("pointerleave", () => { hi.setAttribute("visibility","hidden"); hideTip(wrap); });
+}
+
+function drawHist(){
+  const {E, eid} = STATE; const e = E[eid]; const el = $("#histChart"); const wrap = el.parentElement;
+  const kind = ev(eid).kind;
+  $("#histTitle").textContent = kind === "mbf" ? "ポイント分布（成功試技）" : `ソルブ分布（成功ソルブ・${unitOf(eid)}）`;
+  const from = rangeStart();
+  const vals = e.solves.filter(s => !from || s.r.date >= from).map(s => plotY(eid, s.v, false)).sort((a,b)=>a-b);
+  if (vals.length < 3) { el.innerHTML = `<p class="note">分布を描くにはソルブ数が足りません（${vals.length}件）。</p>`; return; }
+  const W = Math.max(260, el.clientWidth), H = W < 520 ? 230 : 290;
+  const M = {l:34, r:10, t:10, b:24};
+  const lo0 = vals[0], hiQ = vals[Math.floor(0.97*(vals.length-1))];
+  let w = (kind === "mbf" || kind === "fm") ? Math.max(1, niceStep(Math.max(1,(hiQ-lo0))/16)) : niceStep(Math.max(0.01,(hiQ-lo0))/16);
+  if (kind === "mbf" || kind === "fm") w = Math.max(1, Math.round(w));
+  const start = Math.floor(lo0 / w) * w; let nb = Math.max(1, Math.ceil((hiQ - start) / w + 1e-9));
+  if (kind === "mbf" || kind === "fm") nb = Math.max(1, Math.floor((hiQ - start) / w) + 1);
+  const bins = Array.from({length:nb}, (_,i) => ({a:start+i*w, b:start+(i+1)*w, n:0, over:false}));
+  let over = 0;
+  for (const v of vals) { const i = Math.floor((v - start) / w + 1e-9); if (i >= nb) over++; else bins[Math.max(0,i)].n++; }
+  if (over) bins.push({a:start+nb*w, b:Infinity, n:over, over:true});
+  const maxN = Math.max(...bins.map(b=>b.n));
+  const yt = niceTicks(0, maxN, 4);
+  const bw = (W - M.l - M.r) / bins.length;
+  const Y = n => M.t + (1 - n / yt.hi) * (H - M.t - M.b);
+  const discrete = kind === "mbf" || kind === "fm";
+  const lab = v => discrete ? String(+v.toFixed(2)) : tickLabel(eid, v);
+  let svg = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="ソルブ分布">`;
+  svg += `<g class="grid">${yt.ticks.map(v => `<line x1="${M.l}" x2="${W-M.r}" y1="${Y(v)}" y2="${Y(v)}"/>`).join("")}</g><g class="axis">`;
+  svg += yt.ticks.map(v => `<text x="${M.l-6}" y="${Y(v)+4}" text-anchor="end">${v}</text>`).join("");
+  const every = Math.ceil(bins.length / Math.max(2, Math.floor((W - M.l) / 52)));
+  bins.forEach((b,i) => { if (i % every === 0) svg += `<text x="${M.l + i*bw + (discrete ? bw/2 : 0)}" y="${H-6}" text-anchor="${discrete?"middle":"start"}">${b.over ? "超" : lab(b.a)}</text>`; });
+  svg += `</g>`;
+  bins.forEach((b,i) => {
+    if (!b.n) return;
+    const x = M.l + i*bw + 1, wdt = Math.max(1, bw - 2), y = Y(b.n), h = H - M.b - y;
+    const r = Math.min(3, wdt/2, h);
+    svg += `<path d="M${x},${H-M.b}V${y+r}Q${x},${y} ${x+r},${y}H${x+wdt-r}Q${x+wdt},${y} ${x+wdt},${y+r}V${H-M.b}Z" fill="${b.over?"var(--faint)":"var(--accent)"}" data-i="${i}"/>`;
+  });
+  svg += `<rect x="${M.l}" y="0" width="${W-M.l-M.r}" height="${H-M.b}" fill="transparent" id="histHit"/></svg>`;
+  el.innerHTML = svg;
+  const hit = el.querySelector("#histHit");
+  const u = unitOf(eid);
+  hit.addEventListener("pointermove", ev2 => {
+    const box = el.querySelector("svg").getBoundingClientRect(); const sx = W / box.width;
+    const i = Math.floor(((ev2.clientX - box.left) * sx - M.l) / bw);
+    const b = bins[i]; if (!b) { hideTip(wrap); return; }
+    el.querySelectorAll("path[data-i]").forEach(p => p.setAttribute("fill-opacity", +p.dataset.i === i ? "1" : ".55"));
+    const range = b.over ? `${lab(b.a)}${u === "秒" ? "" : u} 以上` : discrete ? (w === 1 ? `${b.a}${u}` : `${b.a}〜${b.b-1}${u}`) : `${lab(b.a)}〜${lab(b.b)}`;
+    const wr = wrap.getBoundingClientRect();
+    tipAt(wrap, `<div class="t">${esc(range)}</div><div><b>${b.n}</b> 回（${pct(b.n, vals.length).toFixed(1)}%）</div>`, ev2.clientX - wr.left, ev2.clientY - wr.top);
+  });
+  hit.addEventListener("pointerleave", () => { el.querySelectorAll("path[data-i]").forEach(p => p.removeAttribute("fill-opacity")); hideTip(wrap); });
+}
+
+function drawYears(){
+  const {compList} = STATE; const el = $("#yearChart"); const wrap = el.parentElement;
+  const by = {}; compList.forEach(c => { const y = c.date.slice(0,4); (by[y] ??= []).push(c); });
+  const yrs = Object.keys(by).map(Number); if (!yrs.length) { el.innerHTML = ""; return; }
+  const all = []; for (let y = Math.min(...yrs); y <= Math.max(...yrs); y++) all.push({y, list:by[y] || []});
+  const W = Math.max(260, el.clientWidth), H = 220, M = {l:30, r:8, t:18, b:24};
+  const maxN = Math.max(...all.map(a => a.list.length)); const yt = niceTicks(0, maxN, 4);
+  const bw = (W - M.l - M.r) / all.length; const Y = n => M.t + (1 - n/yt.hi) * (H - M.t - M.b);
+  const every = Math.ceil(all.length / Math.max(2, Math.floor((W - M.l) / 40)));
+  let svg = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="年別の参加大会数">`;
+  svg += `<g class="grid">${yt.ticks.map(v => `<line x1="${M.l}" x2="${W-M.r}" y1="${Y(v)}" y2="${Y(v)}"/>`).join("")}</g><g class="axis">`;
+  svg += yt.ticks.map(v => `<text x="${M.l-6}" y="${Y(v)+4}" text-anchor="end">${v}</text>`).join("");
+  all.forEach((a,i) => { if (i % every === 0) svg += `<text x="${M.l + i*bw + bw/2}" y="${H-6}" text-anchor="middle">${W < 480 ? "'" + String(a.y).slice(2) : a.y}</text>`; });
+  svg += `</g>`;
+  const maxI = all.findIndex(a => a.list.length === maxN);
+  all.forEach((a,i) => {
+    const n = a.list.length; if (!n) return;
+    const pad = Math.min(8, bw*0.18), x = M.l + i*bw + pad, wdt = Math.max(2, bw - 2*pad), y = Y(n), h = H - M.b - y, r = Math.min(4, wdt/2, h);
+    svg += `<path d="M${x},${H-M.b}V${y+r}Q${x},${y} ${x+r},${y}H${x+wdt-r}Q${x+wdt},${y} ${x+wdt},${y+r}V${H-M.b}Z" fill="var(--accent)" data-i="${i}"/>`;
+    if (i === maxI) svg += `<text x="${x+wdt/2}" y="${y-5}" text-anchor="middle" style="fill:var(--ink);font:600 11.5px var(--f-mono)">${n}</text>`;
+  });
+  svg += `<rect x="${M.l}" y="0" width="${W-M.l-M.r}" height="${H-M.b}" fill="transparent" id="yearHit"/></svg>`;
+  el.innerHTML = svg;
+  el.querySelector("#yearHit").addEventListener("pointermove", ev2 => {
+    const box = el.querySelector("svg").getBoundingClientRect(); const sx = W / box.width;
+    const i = Math.floor(((ev2.clientX - box.left) * sx - M.l) / bw); const a = all[i]; if (!a) { hideTip(wrap); return; }
+    el.querySelectorAll("path[data-i]").forEach(p => p.setAttribute("fill-opacity", +p.dataset.i === i ? "1" : ".55"));
+    const ctry = {}; a.list.forEach(c => { const k = regionName(c.country); ctry[k] = (ctry[k]||0) + 1; });
+    const wr = wrap.getBoundingClientRect();
+    tipAt(wrap, `<div class="t">${a.y}年</div><div><b>${a.list.length}</b> 大会</div><div class="t">${esc(Object.entries(ctry).map(([k,n])=>`${k} ${n}`).join(" / ") || "参加なし")}</div>`, ev2.clientX - wr.left, ev2.clientY - wr.top);
+  });
+  el.querySelector("#yearHit").addEventListener("pointerleave", () => { el.querySelectorAll("path[data-i]").forEach(p => p.removeAttribute("fill-opacity")); hideTip(wrap); });
+}
+
+function renderActivity(){
+  const {compList, E, evIds, person} = STATE;
+  drawYears();
+  const first = compList.at(-1), last = compList[0];
+  const items = [];
+  if (first) items.push(["初出場", `${first.name}`, first.date]);
+  if (last) items.push(["最新の大会", `${last.name}`, last.date]);
+  if (first && last) { const d = Math.round((toT(last.date) - toT(first.date)) / day); items.push(["活動期間", `${Math.floor(d/365.25)}年${Math.floor((d%365.25)/30.44)}か月`, `${fmtNum(d)}日`]); }
+  const byY = {}; compList.forEach(c => { const y = c.date.slice(0,4); byY[y] = (byY[y]||0) + 1; });
+  const topY = Object.entries(byY).sort((a,b) => b[1]-a[1] || b[0].localeCompare(a[0]))[0];
+  if (topY) items.push(["最多参加の年", `${topY[0]}年`, `${topY[1]}大会`]);
+  const mostEv = evIds.map(id => [id, E[id].rounds.length]).sort((a,b) => b[1]-a[1])[0];
+  if (mostEv) items.push(["最多出場種目", ev(mostEv[0]).name, `${E[mostEv[0]].comps.size}大会・${mostEv[1]}ラウンド`]);
+  const imp = evIds.filter(id => ev(id).kind !== "mbf" && E[id].pbA.length >= 2).map(id => { const a = plotY(id, E[id].pbA[0].v, true), b = plotY(id, E[id].pbA.at(-1).v, true); return [id, (a-b)/a, E[id]]; }).sort((x,y) => y[1]-x[1])[0];
+  if (imp) items.push(["最も伸びた平均", ev(imp[0]).name, `${fmtVal(imp[0], imp[2].pbA[0].v, true)} → ${fmtVal(imp[0], imp[2].pbA.at(-1).v, true)}（−${(imp[1]*100).toFixed(1)}%）`]);
+  const sr = evIds.map(id => { const v = E[id].solves.length, d = E[id].dnf; return [id, v/(v+d), v+d]; }).filter(x => x[2] >= 20 && /bf$/.test(x[0]));
+  if (sr.length) { const b = sr.sort((a,b) => b[1]-a[1])[0]; items.push(["目隠し成功率", ev(b[0]).name, `${(b[1]*100).toFixed(1)}%（${b[2]}試技）`]); }
+  const city = {}; compList.forEach(c => { if (c.city && !/multiple/i.test(c.city)) city[c.city] = (city[c.city]||0) + 1; });
+  const topC = Object.entries(city).sort((a,b) => b[1]-a[1])[0];
+  if (topC) items.push(["よく行く都市", topC[0], `${topC[1]}大会`]);
+  if (person.championshipIds?.length) items.push(["選手権", `${person.championshipIds.length}大会に出場`, person.championshipIds.filter(x => /^WC\d{4}$/.test(x)).map(x => "世界大会" + x.slice(2)).join("・") || ""]);
+  $("#highlights").innerHTML = items.map(([k,v,s]) => `<li><span class="k">${k}</span><span class="v">${esc(v)}${s ? `<small>${esc(s)}</small>` : ""}</span></li>`).join("");
+  const ct = {}; compList.forEach(c => { const k = c.country || "?"; ct[k] = (ct[k]||0) + 1; });
+  const rows = Object.entries(ct).sort((a,b) => b[1]-a[1]); const mx = rows[0]?.[1] || 1;
+  $("#countries").innerHTML = rows.map(([c,n]) => `<div><span>${esc(regionName(c))}</span><span class="track"><span style="width:${(100*n/mx).toFixed(1)}%"></span></span><span class="c">${n}</span></div>`).join("");
+}
+
+/* ---------- results history (WCA-style) ---------- */
+function initHistFilters(){
+  const {evIds} = STATE;
+  const prev = $("#histEvent").value;
+  $("#histEvent").innerHTML = `<option value="">すべての種目</option>` + evIds.map(id => `<option value="${esc(id)}">${esc(ev(id).name)}</option>`).join("");
+  if (prev && evIds.includes(prev)) $("#histEvent").value = prev;
+}
+function renderHistory(){
+  if (!STATE) return;
+  const {E, evIds, pbRound} = STATE;
+  const fe = $("#histEvent").value, mode = $("#histShow").value;
+  const keep = r => mode === "all" || (mode === "rec" && (r.recS || r.recA)) || (mode === "pb" && pbRound.has(r)) || (mode === "final" && r.round === "Final");
+  let total = 0, html = "";
+  for (const id of (fe ? [fe] : evIds)) {
+    const e = E[id]; if (!e) continue;
+    const rs = e.rounds.filter(keep).sort((a,b) => b.date.localeCompare(a.date) || b.cid.localeCompare(a.cid) || b.ro - a.ro);
+    if (!rs.length) continue;
+    total += rs.length;
+    const nRec = rs.reduce((a,r) => a + (r.recS?1:0) + (r.recA?1:0), 0);
+    let rows = "", prevC = null;
+    for (const r of rs) {
+      const t = pbRound.get(r) || "";
+      const first = r.cid !== prevC; prevC = r.cid;
+      rows += `<tr class="${first ? "newcomp" : ""} ${r.recS || r.recA ? "hasrec" : ""}">
+        <td class="l comp" title="${esc(compLabel(r))}">${first ? `${esc(compLabel(r))}<small>${esc(r.date)}</small>` : ""}</td>
+        <td class="l">${esc(RJ[r.round] || r.round)}</td><td class="num">${r.position ?? ""}</td>
+        <td class="val"><b>${esc(fmtVal(id, r.best, false))}</b>${badge(r.recS)}${t.includes("S") ? ' <span class="tag pb">PB</span>' : ""}</td>
+        <td class="val"><b>${esc(fmtVal(id, r.average, true))}</b>${badge(r.recA)}${t.includes("A") ? ' <span class="tag pb">PB</span>' : ""}</td>
+        <td class="solves">${solvesHTML(r)}</td></tr>`;
+    }
+    html += `<div class="panel hist-ev"><h3>${esc(ev(id).name)} <small>${rs.length}ラウンド${nRec ? `・記録 ${nRec}件` : ""}</small></h3>
+      <div class="scroll"><table><thead><tr><th class="l">大会</th><th class="l">ラウンド</th><th>順位</th><th>単発</th><th>平均</th><th class="l">記録</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+  }
+  $("#histCount").textContent = `${fmtNum(total)} ラウンド`;
+  $("#histList").innerHTML = html || `<div class="panel"><p class="note" style="padding:16px">${mode === "rec" && RECS.state !== "ok" ? "記録バッジのデータを取得できていないため表示できません。" : "条件に一致する記録はありません。"}</p></div>`;
+}
+
+/* ---------- competition log ---------- */
+function initLogFilters(){
+  const {evIds, compList} = STATE;
+  $("#logFilter").value = "";
+  $("#logEvent").innerHTML = `<option value="">すべての種目</option>` + evIds.map(id => `<option value="${esc(id)}">${esc(ev(id).name)}</option>`).join("");
+  const ys = [...new Set(compList.map(c => c.date.slice(0,4)))].sort().reverse();
+  $("#logYear").innerHTML = `<option value="">すべての年</option>` + ys.map(y => `<option value="${y}">${y}年</option>`).join("");
+}
+function solvesHTML(r){
+  const id = r.eid; const s = r.solves.filter(v => v !== 0);
+  let trim = new Set();
+  if (r.format === "Average of 5" && s.length === 5) {
+    const keys = s.map(v => v > 0 ? key(id, v) : Infinity);
+    const minI = keys.indexOf(Math.min(...keys)); let maxI = 0; keys.forEach((k,i) => { if (k >= keys[maxI] && i !== minI) maxI = i; });
+    trim = new Set([minI, maxI]);
+  }
+  return s.map((v,i) => trim.has(i) ? `<span class="tr">(${esc(fmtVal(id, v, false))})</span>` : esc(fmtVal(id, v, false))).join("&nbsp; ");
+}
+function renderLog(){
+  const {compList, pbRound, person} = STATE;
+  const q = $("#logFilter").value.trim().toLowerCase(), fe = $("#logEvent").value, fy = $("#logYear").value;
+  const champ = new Set(person.championshipIds || []);
+  const list = compList.filter(c => (!q || (c.name + " " + c.city + " " + c.cid).toLowerCase().includes(q)) && (!fe || c.rounds.some(r => r.eid === fe)) && (!fy || c.date.startsWith(fy)));
+  $("#logCount").textContent = `${list.length} / ${compList.length} 大会`;
+  const shown = list.slice(0, STATE.logShown);
+  $("#compLog").innerHTML = shown.length ? shown.map(c => {
+    const rs = c.rounds.filter(r => !fe || r.eid === fe).sort((a,b) => ev(a.eid).order - ev(b.eid).order || b.ro - a.ro);
+    const pods = c.rounds.filter(r => r.round === "Final" && r.best > 0 && r.position <= 3);
+    const pbs = c.rounds.filter(r => pbRound.has(r)).length;
+    const evCount = new Set(c.rounds.map(r => r.eid)).size;
+    const cls = ["gold","silver","bronze"];
+    return `<details class="comp"><summary><span class="cdate">${esc(c.date)}</span>
+      <span class="cname">${esc(c.name)}<small>${esc(c.city)}${c.city ? " · " : ""}${esc(regionName(c.country))}</small></span>
+      <span class="cright">${champ.has(c.cid) ? `<span class="tag champ">選手権</span>` : ""}${c.rounds.flatMap(r => [r.recS, r.recA]).filter(Boolean).map(badge).join("")}${pbs ? `<span class="tag pb">PB ${pbs}</span>` : ""}
+        ${pods.length ? `<span class="pods">${pods.map(r => `<span title="${esc(ev(r.eid).name)} ${r.position}位"><i class="d-${cls[r.position-1]}"></i>${esc(ev(r.eid).name.replace(/（.*）/,""))}</span>`).join("")}</span>` : ""}
+        <span>${evCount}種目</span></span></summary>
+      <div class="inner"><table><thead><tr><th class="l">種目</th><th class="l">ラウンド</th><th>順位</th><th>単発</th><th>平均</th><th class="l">記録</th></tr></thead><tbody>
+      ${rs.map(r => { const t = pbRound.get(r) || ""; return `<tr><td class="l">${esc(ev(r.eid).name)}</td><td class="l">${esc(RJ[r.round] || r.round)} <span class="zero">${esc(FJ[r.format] || "")}</span></td>
+        <td class="num">${r.position ?? ""}</td><td class="num">${esc(fmtVal(r.eid, r.best, false))}${badge(r.recS)}${t.includes("S") ? ' <span class="tag pb">PB</span>' : ""}</td>
+        <td class="num">${esc(fmtVal(r.eid, r.average, true))}${badge(r.recA)}${t.includes("A") ? ' <span class="tag pb">PB</span>' : ""}</td><td class="solves">${solvesHTML(r)}</td></tr>`; }).join("")}
+      </tbody></table></div></details>`;
+  }).join("") : `<p class="note" style="padding:16px">条件に一致する大会はありません。</p>`;
+  $("#moreBtn").hidden = list.length <= STATE.logShown;
+  $("#moreBtn").textContent = `さらに表示（残り ${list.length - STATE.logShown}）`;
+}
+
+/* ---------- events ---------- */
+$("#searchForm").addEventListener("submit", e => { e.preventDefault(); onSearch($("#q").value); });
+$("#cands").addEventListener("click", e => { const b = e.target.closest("button[data-id]"); if (b) { $("#q").value = b.dataset.id; loadId(b.dataset.id); } });
+$("#pbTable").addEventListener("click", e => { const tr = e.target.closest("tr[data-eid]"); if (tr) selectEvent(tr.dataset.eid, true); });
+$("#pbTable").addEventListener("keydown", e => { if (e.key !== "Enter") return; const tr = e.target.closest("tr[data-eid]"); if (tr) selectEvent(tr.dataset.eid, true); });
+$("#evChips").addEventListener("click", e => { const b = e.target.closest("button[data-eid]"); if (b) selectEvent(b.dataset.eid, false); });
+$("#rankSeg").addEventListener("click", e => { const b = e.target.closest("button[data-t]"); if (!b || b.disabled) return; STATE.rankType = b.dataset.t; renderRanking(); });
+$("#rangeSeg").addEventListener("click", e => { const b = e.target.closest("button[data-r]"); if (!b) return; STATE.range = +b.dataset.r;
+  document.querySelectorAll("#rangeSeg button").forEach(x => x.setAttribute("aria-pressed", x === b)); drawProg(); drawHist(); });
+["input","change"].forEach(t => { $("#logFilter").addEventListener(t, () => { STATE.logShown = 20; renderLog(); }); });
+$("#logEvent").addEventListener("change", () => { STATE.logShown = 20; renderLog(); });
+$("#logYear").addEventListener("change", () => { STATE.logShown = 20; renderLog(); });
+$("#histEvent").addEventListener("change", renderHistory);
+$("#histShow").addEventListener("change", renderHistory);
+$("#moreBtn").addEventListener("click", () => { STATE.logShown += 20; renderLog(); });
+let rT = null; let lastW = innerWidth;
+addEventListener("resize", () => { if (innerWidth === lastW) return; lastW = innerWidth; clearTimeout(rT); rT = setTimeout(() => { if (STATE) { drawProg(); drawHist(); drawYears(); } }, 150); });
+document.addEventListener("click", e => { if (e.target.id === "refreshBtn") loadId(e.target.dataset.id); });
+
+/* ---------- boot ---------- */
+(function boot(){
+  let id = null;
+  try { id = new URLSearchParams(location.search).get("id"); } catch(e){}
+  if (!id && /^#\d{4}[A-Za-z]{4}\d{2}$/.test(location.hash)) id = location.hash.slice(1);
+  // ホーム画面から開いたときは、最後に見ていた選手を表示する
+  if (!id) { try { id = localStorage.getItem("wca-last-id"); } catch(e){} }
+  if (id && /^\d{4}[A-Za-z]{4}\d{2}$/.test(id)) { $("#q").value = id.toUpperCase(); loadId(id.toUpperCase()); return; }
+})();
+
+/* ---------- PWA: オフライン対応のサービスワーカー（https で公開したときのみ） ---------- */
+if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
+  addEventListener("load", () => { navigator.serviceWorker.register("sw.js").catch(() => {}); });
+}
+</script>
+</body>
+</html>
