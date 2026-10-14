@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="WCA Stats">
+<meta name="apple-mobile-web-app-title" content="WCA Stats" id="appTitle">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="icon" href="icons/favicon.svg" type="image/svg+xml">
@@ -214,6 +214,7 @@ details.comp[open] summary{background:var(--sunk)}
 .rec-nr{background:var(--rec-nr)}.rec-cr{background:var(--rec-cr)}.rec-wr{background:var(--rec-wr)}
 .tag.pb{background:transparent;color:var(--accent-ink);border:1px solid var(--accent);padding:0 5px}
 .recnote{font-size:12.5px;color:var(--faint)}
+.homehint{font-size:12.5px;color:var(--faint);flex-basis:100%}
 .recnote.err{color:var(--bad)}
 
 /* results history (WCA-style, newest first) */
@@ -504,6 +505,7 @@ async function loadId(id){
     + `<button type="button" class="btn ghost" id="refreshBtn" data-id="${esc(person.id)}">再読み込み</button>`);
   try { localStorage.setItem("wca-last-id", person.id); } catch(e){}
   try { history.replaceState(null, "", location.pathname + "?id=" + encodeURIComponent(person.id)); } catch(e){}
+  showHomeHint(person);
 }
 
 async function onSearch(q){
@@ -630,6 +632,9 @@ function render(person, comps){
   $("#main").hidden = false;
   $("#intro").hidden = true;
   document.title = `${person.name.replace(/\s*\(.*\)$/,"")} — WCA 個人成績ビューア`;
+  // ホーム画面に追加したときのアイコン名：現地表記の名前（あれば）か氏名
+  const local = (person.name.match(/\(([^)]+)\)\s*$/) || [])[1];
+  $("#appTitle").setAttribute("content", local || person.name);
   applyRecs();
   renderProfile(); renderTiles(); renderPB(); renderChips(); renderEvent(); renderActivity(); initHistFilters(); renderHistory(); initLogFilters(); renderLog(); updateRecNote();
 }
@@ -1114,6 +1119,17 @@ document.addEventListener("click", e => { if (e.target.id === "refreshBtn") load
   if (!id) { try { id = localStorage.getItem("wca-last-id"); } catch(e){} }
   if (id && /^\d{4}[A-Za-z]{4}\d{2}$/.test(id)) { $("#q").value = id.toUpperCase(); loadId(id.toUpperCase()); return; }
 })();
+
+/* ---------- iPhone: この選手のページをホーム画面に追加する案内 ---------- */
+function showHomeHint(person){
+  const ios = /iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const standalone = navigator.standalone === true || matchMedia("(display-mode: standalone)").matches;
+  if (!ios || standalone) return;
+  const s = document.createElement("span");
+  s.className = "homehint";
+  s.textContent = `この選手をホーム画面に追加: 共有ボタン →「ホーム画面に追加」`;
+  $("#status").appendChild(s);
+}
 
 /* ---------- PWA: オフライン対応のサービスワーカー（https で公開したときのみ） ---------- */
 if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
