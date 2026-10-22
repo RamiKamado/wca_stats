@@ -214,6 +214,8 @@ details.comp[open] summary{background:var(--sunk)}
 .rec-nr{background:var(--rec-nr)}.rec-cr{background:var(--rec-cr)}.rec-wr{background:var(--rec-wr)}
 .tag.pb{background:transparent;color:var(--accent-ink);border:1px solid var(--accent);padding:0 5px}
 .recnote{font-size:12.5px;color:var(--faint)}
+.ast{display:inline-block;width:1em;text-align:right;color:var(--faint)}
+.ycap{caption-side:bottom;text-align:left;font-size:12px;color:var(--faint);padding:8px 12px 12px;white-space:normal;border-top:1px solid var(--line)}
 .homehint{font-size:12.5px;color:var(--faint);flex-basis:100%}
 .recnote.err{color:var(--bad)}
 
@@ -595,8 +597,12 @@ function analyze(person, comps){
     e.rounds.push(r); e.comps.add(r.cid);
     if (r.round === "Final") { e.finals++; if (r.best > 0 && r.position >= 1 && r.position <= 3) e.pod[r.position-1]++; }
     const y = r.date.slice(0,4);
-    const Y = e.years[y] ??= {rounds:0, valid:0, att:0, sum:0, bestS:null, bestA:null};
+    const Y = e.years[y] ??= {rounds:0, valid:0, att:0, sum:0, bestS:null, bestA:null, rbSum:0, rbN:0, raSum:0, raN:0, raDnf:0};
     Y.rounds++;
+    // ラウンドごとの単発ベスト・平均（DNFのラウンドは平均の計算から除く）
+    if (r.best > 0) { Y.rbSum += plotY(r.eid, r.best, false); Y.rbN++; }
+    if (r.average > 0) { Y.raSum += plotY(r.eid, r.average, true); Y.raN++; }
+    else if (r.average === -1) Y.raDnf++;
     for (const [i, s] of r.solves.entries()) {
       if (s > 0) { e.solves.push({v:s, r, i}); valid++; Y.valid++; Y.att++; Y.sum += plotY(r.eid, s, false); if (ev(r.eid).kind === "time") timeSum += s; }
       else if (s === -1) { e.dnf++; dnf++; Y.att++; }
@@ -787,13 +793,22 @@ function renderRanking(){
 function renderYearTable(){
   const {E, eid} = STATE; const e = E[eid];
   const ys = Object.keys(e.years).sort().reverse();
-  let h = `<thead><tr><th class="l">年</th><th>ラウンド</th><th>有効ソルブ</th><th>成功率</th><th>${ev(eid).kind==="mbf"?"平均ポイント":"ソルブ平均"}</th><th>年間ベスト単発</th><th>年間ベスト平均</th></tr></thead><tbody>`;
+  const mbf = ev(eid).kind === "mbf";
+  const hasAvg = e.rounds.some(r => r.average !== 0);
+  let h = `<thead><tr><th class="l">年</th><th>ラウンド</th><th>有効ソルブ</th><th>成功率</th><th>${mbf?"平均ポイント":"ソルブ平均"}</th>
+    <th class="bl">ラウンド単発ベストの平均</th>${hasAvg ? `<th>ラウンド平均の平均</th>` : ""}<th class="bl">年間ベスト単発</th>${hasAvg ? `<th>年間ベスト平均</th>` : ""}</tr></thead><tbody>`;
   for (const y of ys) {
     const Y = e.years[y];
+    const rb = Y.rbN ? `<span title="単発ベストのあるラウンド ${Y.rbN}回の平均">${esc(fmtPlot(eid, Y.rbSum/Y.rbN))}</span>` : "–";
+    const ra = Y.raN ? `<span title="平均が出たラウンド ${Y.raN}回の平均${Y.raDnf ? `（DNF ${Y.raDnf}回は除外）` : ""}">${esc(fmtPlot(eid, Y.raSum/Y.raN))}</span><span class="ast"${Y.raDnf ? "" : ' aria-hidden="true" style="visibility:hidden"'}>*</span>` : `–<span class="ast" aria-hidden="true" style="visibility:hidden">*</span>`;
     h += `<tr><td class="l num">${y}</td><td class="num">${Y.rounds}</td><td class="num">${Y.valid}</td><td class="num">${Y.att ? pct(Y.valid,Y.att).toFixed(0)+"%" : "–"}</td>
-      <td class="num">${Y.valid ? esc(fmtPlot(eid, Y.sum/Y.valid)) : "–"}</td><td class="num">${Y.bestS ? esc(fmtVal(eid,Y.bestS,false)) : "–"}</td><td class="num">${Y.bestA ? esc(fmtVal(eid,Y.bestA,true)) : "–"}</td></tr>`;
+      <td class="num">${Y.valid ? esc(fmtPlot(eid, Y.sum/Y.valid)) : "–"}</td>
+      <td class="num bl">${rb}</td>${hasAvg ? `<td class="num">${ra}</td>` : ""}
+      <td class="num bl">${Y.bestS ? esc(fmtVal(eid,Y.bestS,false)) : "–"}</td>${hasAvg ? `<td class="num">${Y.bestA ? esc(fmtVal(eid,Y.bestA,true)) : "–"}</td>` : ""}</tr>`;
   }
-  $("#yearTable").innerHTML = h + "</tbody>";
+  const cap = `ラウンド単発ベストの平均：各ラウンドで一番良かった単発をその年のラウンド数で平均。`
+    + (hasAvg ? `ラウンド平均の平均：各ラウンドの平均（Ao5・Mo3）をその年で平均。平均がDNFのラウンドは除外し、除外があった年に * を付けています。` : "");
+  $("#yearTable").innerHTML = `<caption class="ycap">${cap}</caption>` + h + "</tbody>";
 }
 
 /* ---------- charts (hand-built SVG) ---------- */
