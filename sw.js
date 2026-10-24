@@ -3,7 +3,7 @@
  * - 成績データは「ネット優先・失敗したらキャッシュ」で取得し、一度見た選手はオフラインでも表示できる
  * index.html を更新したら VERSION を上げると、古いキャッシュが確実に入れ替わります。
  */
-const VERSION = "v5";
+const VERSION = "v6";
 const SHELL = `wca-stats-shell-${VERSION}`;
 const DATA = "wca-stats-data";
 const FONTS = "wca-stats-fonts";

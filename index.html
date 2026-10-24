@@ -143,6 +143,11 @@ dl.stats dd{margin:0;text-align:right;font-family:var(--f-mono);font-variant-num
 .rankhead{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:14px 16px 10px}
 .rankhead h3{margin:0;font:600 15px var(--f-body);color:var(--muted);letter-spacing:.02em}
 .rankhead .cnt{font-size:12.5px;color:var(--faint);margin-left:auto}
+.rankper{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.rankper select,.rankper input{padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--surface);font-size:13.5px;min-width:0}
+.rankcustom{display:inline-flex;flex-wrap:wrap;align-items:center;gap:6px;color:var(--muted)}
+.rankcustom[hidden]{display:none}
+@media (max-width:560px){.rankper select,.rankper input{font-size:16px}}
 .seg button:disabled{opacity:.4;cursor:not-allowed}
 .rankwrap{max-height:560px;overflow:auto;border-top:1px solid var(--line)}
 #rankTable td,#rankTable th{padding:6px 10px;font-size:13.5px}
@@ -305,10 +310,16 @@ footer{margin-top:48px;padding-top:16px;border-top:1px solid var(--line);color:v
               <button type="button" data-t="s" aria-pressed="true">単発 Single</button>
               <button type="button" data-t="a" aria-pressed="false">平均 Average</button>
             </div>
+            <div class="rankper">
+              <select id="rankPeriod" aria-label="ランキングの期間"></select>
+              <span class="rankcustom" id="rankCustom" hidden>
+                <input type="date" id="rankFrom" aria-label="開始日"><span>〜</span><input type="date" id="rankTo" aria-label="終了日">
+              </span>
+            </div>
             <span class="cnt" id="rankCount"></span>
           </div>
           <div class="rankwrap"><table id="rankTable"></table></div>
-          <div class="ranknote"><span id="rankNoteLead">この選手の全期間の公式記録を良い順に並べています。</span>同記録は同順位、先に出した記録を上に表示。<span class="tag pb">PB</span> はその時点で自己ベストを更新した記録です。</div>
+          <div class="ranknote"><span id="rankNoteLead">この選手の全期間の公式記録を良い順に並べています。</span>同記録は同順位、先に出した記録を上に表示。期間を絞り込んだときの順位は、その期間内での順位です。<span class="tag pb">PB</span> はその時点で自己ベストを更新した記録です。</div>
         </div>
       </div>
       <div class="filterrow">
@@ -646,6 +657,7 @@ function render(person, comps){
   const local = (person.name.match(/\(([^)]+)\)\s*$/) || [])[1];
   $("#appTitle").setAttribute("content", local || person.name);
   applyRecs();
+  initRankPeriod(!!prevEid);
   renderProfile(); renderTiles(); renderPB(); renderChips(); renderEvent(); renderActivity(); initHistFilters(); renderHistory(); initLogFilters(); renderLog(); updateRecNote();
 }
 
@@ -756,6 +768,35 @@ function renderEvent(){
   drawProg(); drawHist();
 }
 
+/* ランキングの期間 */
+function initRankPeriod(keep){
+  const sel = $("#rankPeriod"), prev = keep ? sel.value : "all";
+  const ys = [...new Set(STATE.rounds.map(r => r.date.slice(0,4)))].sort().reverse();
+  sel.innerHTML = `<option value="all">全期間</option><option value="r1">直近1年</option><option value="r3">直近3年</option>`
+    + `<optgroup label="年">${ys.map(y => `<option value="y${y}">${y}年</option>`).join("")}</optgroup>`
+    + `<option value="custom">期間を指定…</option>`;
+  sel.value = [...sel.options].some(o => o.value === prev) ? prev : "all";
+  const first = STATE.rounds[0]?.date, last = STATE.rounds.at(-1)?.date;
+  for (const id of ["#rankFrom", "#rankTo"]) { const el = $(id); el.min = first || ""; el.max = last || ""; }
+  if (!keep || !$("#rankFrom").value) $("#rankFrom").value = first || "";
+  if (!keep || !$("#rankTo").value) $("#rankTo").value = last || "";
+  $("#rankCustom").hidden = sel.value !== "custom";
+}
+function rankRange(){
+  const v = $("#rankPeriod").value;
+  if (!v || v === "all" || !STATE.rounds.length) return null;
+  if (v === "r1" || v === "r3") {
+    // 直近N年は、この選手の最新の大会日を基準にする（推移グラフと同じ）
+    const last = STATE.rounds.at(-1).date; const d = new Date(toT(last)); d.setUTCFullYear(d.getUTCFullYear() - (v === "r1" ? 1 : 3));
+    const from = d.toISOString().slice(0,10);
+    return {from, to:null, label:`直近${v === "r1" ? 1 : 3}年（${from}〜）`};
+  }
+  if (v[0] === "y") { const y = v.slice(1); return {from:`${y}-01-01`, to:`${y}-12-31`, label:`${y}年`}; }
+  let from = $("#rankFrom").value || null, to = $("#rankTo").value || null;
+  if (from && to && from > to) [from, to] = [to, from];
+  return {from, to, label:`${from || "最初"}〜${to || "最新"}`};
+}
+
 function renderRanking(){
   const {E, eid} = STATE; const e = E[eid];
   const avgRounds = e.rounds.filter(r => r.average > 0);
@@ -774,6 +815,8 @@ function renderRanking(){
     const seen = new Set(); items.forEach(x => { if (x.pb) { if (seen.has(x.r)) x.pb = false; else seen.add(x.r); } });
     const firstBest = new Set(); items.forEach(x => { if (x.v === x.r.best && !firstBest.has(x.r)) { firstBest.add(x.r); x.first = true; } });
   }
+  const R = rankRange();
+  if (R) items = items.filter(x => (!R.from || x.r.date >= R.from) && (!R.to || x.r.date <= R.to));
   const worst = STATE.rankDir === "worst";
   const dir = worst ? -1 : 1;
   items.sort((a,b) => dir * (key(eid,a.v) - key(eid,b.v)) || a.r.date.localeCompare(b.r.date) || a.r.ro - b.r.ro || (a.i ?? 0) - (b.i ?? 0));
@@ -783,10 +826,11 @@ function renderRanking(){
   const unit = t === "s" ? "ソルブ" : "回";
   document.querySelectorAll("#rankDir button").forEach(b => b.setAttribute("aria-pressed", (b.dataset.d === "worst") === worst));
   $("#rankTitle").textContent = worst ? "記録ランキング ワースト 100" : "記録ランキング Top 100";
+  const span = R ? `${R.label}の` : "全期間の";
   $("#rankNoteLead").textContent = worst
-    ? "この選手の全期間の公式記録を悪い順に並べています（DNF・DNSは含みません）。"
-    : "この選手の全期間の公式記録を良い順に並べています。";
-  $("#rankCount").textContent = items.length ? `全${fmtNum(items.length)}${unit}中 ${worst ? "下位" : "上位"}${top.length}件` : "";
+    ? `この選手の${span}公式記録を悪い順に並べています（DNF・DNSは含みません）。`
+    : `この選手の${span}公式記録を良い順に並べています。`;
+  $("#rankCount").textContent = items.length ? `${R ? R.label + "・" : ""}全${fmtNum(items.length)}${unit}中 ${worst ? "下位" : "上位"}${top.length}件` : "";
   const isAvg = t === "a";
   let h = `<thead><tr><th class="l">${worst ? "ワースト" : "順位"}</th><th>${isAvg ? "平均" : "単発"}</th><th class="l">日付</th><th class="l">大会</th><th class="l">ラウンド</th><th class="l">${isAvg ? "内訳" : "試技"}</th></tr></thead><tbody>`;
   h += top.map(x => {
@@ -796,7 +840,7 @@ function renderRanking(){
       <td class="l num">${esc(r.date)}</td><td class="l cmp" title="${esc(compLabel(r))}">${esc(compLabel(r))}</td>
       <td class="l">${esc(RJ[r.round] || r.round)} <span class="zero">${esc(FJ[r.format] || "")}</span></td>${detail}</tr>`;
   }).join("");
-  if (!top.length) h += `<tr><td class="l" colspan="6"><span class="zero">記録なし</span></td></tr>`;
+  if (!top.length) h += `<tr><td class="l" colspan="6"><span class="zero">${R ? "この期間の記録はありません" : "記録なし"}</span></td></tr>`;
   $("#rankTable").innerHTML = h + "</tbody>";
   document.querySelector(".rankwrap").scrollTop = 0;
 }
@@ -1123,6 +1167,8 @@ $("#cands").addEventListener("click", e => { const b = e.target.closest("button[
 $("#pbTable").addEventListener("click", e => { const tr = e.target.closest("tr[data-eid]"); if (tr) selectEvent(tr.dataset.eid, true); });
 $("#pbTable").addEventListener("keydown", e => { if (e.key !== "Enter") return; const tr = e.target.closest("tr[data-eid]"); if (tr) selectEvent(tr.dataset.eid, true); });
 $("#evChips").addEventListener("click", e => { const b = e.target.closest("button[data-eid]"); if (b) selectEvent(b.dataset.eid, false); });
+$("#rankPeriod").addEventListener("change", () => { $("#rankCustom").hidden = $("#rankPeriod").value !== "custom"; renderRanking(); });
+["#rankFrom", "#rankTo"].forEach(id => $(id).addEventListener("change", renderRanking));
 $("#rankDir").addEventListener("click", e => { const b = e.target.closest("button[data-d]"); if (!b) return; STATE.rankDir = b.dataset.d; renderRanking(); });
 $("#rankSeg").addEventListener("click", e => { const b = e.target.closest("button[data-t]"); if (!b || b.disabled) return; STATE.rankType = b.dataset.t; renderRanking(); });
 $("#rangeSeg").addEventListener("click", e => { const b = e.target.closest("button[data-r]"); if (!b) return; STATE.range = +b.dataset.r;
