@@ -296,7 +296,11 @@ footer{margin-top:48px;padding-top:16px;border-top:1px solid var(--line);color:v
         <div class="panel box"><h3>成績サマリー</h3><dl class="stats" id="evStats"></dl></div>
         <div class="panel">
           <div class="rankhead">
-            <h3>記録ランキング Top 100</h3>
+            <h3 id="rankTitle">記録ランキング Top 100</h3>
+            <div class="seg" id="rankDir" role="group" aria-label="上位・下位の切り替え">
+              <button type="button" data-d="top" aria-pressed="true">Top 100</button>
+              <button type="button" data-d="worst" aria-pressed="false">ワースト 100</button>
+            </div>
             <div class="seg" id="rankSeg" role="group" aria-label="単発・平均の切り替え">
               <button type="button" data-t="s" aria-pressed="true">単発 Single</button>
               <button type="button" data-t="a" aria-pressed="false">平均 Average</button>
@@ -304,7 +308,7 @@ footer{margin-top:48px;padding-top:16px;border-top:1px solid var(--line);color:v
             <span class="cnt" id="rankCount"></span>
           </div>
           <div class="rankwrap"><table id="rankTable"></table></div>
-          <div class="ranknote">この選手の全期間の公式記録を良い順に並べています。同記録は同順位、先に出した記録を上に表示。<span class="tag pb">PB</span> はその時点で自己ベストを更新した記録です。</div>
+          <div class="ranknote"><span id="rankNoteLead">この選手の全期間の公式記録を良い順に並べています。</span>同記録は同順位、先に出した記録を上に表示。<span class="tag pb">PB</span> はその時点で自己ベストを更新した記録です。</div>
         </div>
       </div>
       <div class="filterrow">
@@ -634,7 +638,7 @@ function render(person, comps){
   const A = analyze(person, comps);
   const evIds = Object.keys(A.E).sort((a,b) => ev(a).order - ev(b).order);
   const prevEid = STATE && STATE.person.id === person.id ? STATE.eid : null;
-  STATE = {person, comps, ...A, evIds, eid: prevEid && A.E[prevEid] ? prevEid : (A.E["333"] ? "333" : evIds[0]), range:0, logShown:20, rankType: STATE?.rankType || "s"};
+  STATE = {person, comps, ...A, evIds, eid: prevEid && A.E[prevEid] ? prevEid : (A.E["333"] ? "333" : evIds[0]), range:0, logShown:20, rankType: STATE?.rankType || "s", rankDir: STATE?.rankDir || "top"};
   $("#main").hidden = false;
   $("#intro").hidden = true;
   document.title = `${person.name.replace(/\s*\(.*\)$/,"")} — WCA 個人成績ビューア`;
@@ -770,18 +774,25 @@ function renderRanking(){
     const seen = new Set(); items.forEach(x => { if (x.pb) { if (seen.has(x.r)) x.pb = false; else seen.add(x.r); } });
     const firstBest = new Set(); items.forEach(x => { if (x.v === x.r.best && !firstBest.has(x.r)) { firstBest.add(x.r); x.first = true; } });
   }
-  items.sort((a,b) => key(eid,a.v) - key(eid,b.v) || a.r.date.localeCompare(b.r.date) || a.r.ro - b.r.ro || (a.i ?? 0) - (b.i ?? 0));
+  const worst = STATE.rankDir === "worst";
+  const dir = worst ? -1 : 1;
+  items.sort((a,b) => dir * (key(eid,a.v) - key(eid,b.v)) || a.r.date.localeCompare(b.r.date) || a.r.ro - b.r.ro || (a.i ?? 0) - (b.i ?? 0));
   let prevK = null, rank = 0;
   items.forEach((x, n) => { const k = key(eid, x.v); if (k !== prevK) { rank = n + 1; prevK = k; } x.rank = rank; });
   const top = items.slice(0, 100);
   const unit = t === "s" ? "ソルブ" : "回";
-  $("#rankCount").textContent = items.length ? `全${fmtNum(items.length)}${unit}中 上位${top.length}件` : "";
+  document.querySelectorAll("#rankDir button").forEach(b => b.setAttribute("aria-pressed", (b.dataset.d === "worst") === worst));
+  $("#rankTitle").textContent = worst ? "記録ランキング ワースト 100" : "記録ランキング Top 100";
+  $("#rankNoteLead").textContent = worst
+    ? "この選手の全期間の公式記録を悪い順に並べています（DNF・DNSは含みません）。"
+    : "この選手の全期間の公式記録を良い順に並べています。";
+  $("#rankCount").textContent = items.length ? `全${fmtNum(items.length)}${unit}中 ${worst ? "下位" : "上位"}${top.length}件` : "";
   const isAvg = t === "a";
-  let h = `<thead><tr><th class="l">順位</th><th>${isAvg ? "平均" : "単発"}</th><th class="l">日付</th><th class="l">大会</th><th class="l">ラウンド</th><th class="l">${isAvg ? "内訳" : "試技"}</th></tr></thead><tbody>`;
+  let h = `<thead><tr><th class="l">${worst ? "ワースト" : "順位"}</th><th>${isAvg ? "平均" : "単発"}</th><th class="l">日付</th><th class="l">大会</th><th class="l">ラウンド</th><th class="l">${isAvg ? "内訳" : "試技"}</th></tr></thead><tbody>`;
   h += top.map(x => {
     const r = x.r;
     const detail = isAvg ? `<td class="solves">${solvesHTML(r)}</td>` : `<td class="l num">${(x.i ?? 0) + 1}本目 <span class="zero">/ ${r.solves.filter(v => v !== 0).length}</span></td>`;
-    return `<tr class="${x.rank <= 3 ? "top3" : ""}"><td class="pos l">${x.rank}</td><td class="val">${esc(fmtVal(eid, x.v, isAvg))}${badge(isAvg ? r.recA : (x.first ? r.recS : null))}${x.pb ? ' <span class="tag pb">PB</span>' : ""}</td>
+    return `<tr class="${x.rank <= 3 && !worst ? "top3" : ""}"><td class="pos l">${x.rank}</td><td class="val">${esc(fmtVal(eid, x.v, isAvg))}${badge(isAvg ? r.recA : (x.first ? r.recS : null))}${x.pb ? ' <span class="tag pb">PB</span>' : ""}</td>
       <td class="l num">${esc(r.date)}</td><td class="l cmp" title="${esc(compLabel(r))}">${esc(compLabel(r))}</td>
       <td class="l">${esc(RJ[r.round] || r.round)} <span class="zero">${esc(FJ[r.format] || "")}</span></td>${detail}</tr>`;
   }).join("");
@@ -1112,6 +1123,7 @@ $("#cands").addEventListener("click", e => { const b = e.target.closest("button[
 $("#pbTable").addEventListener("click", e => { const tr = e.target.closest("tr[data-eid]"); if (tr) selectEvent(tr.dataset.eid, true); });
 $("#pbTable").addEventListener("keydown", e => { if (e.key !== "Enter") return; const tr = e.target.closest("tr[data-eid]"); if (tr) selectEvent(tr.dataset.eid, true); });
 $("#evChips").addEventListener("click", e => { const b = e.target.closest("button[data-eid]"); if (b) selectEvent(b.dataset.eid, false); });
+$("#rankDir").addEventListener("click", e => { const b = e.target.closest("button[data-d]"); if (!b) return; STATE.rankDir = b.dataset.d; renderRanking(); });
 $("#rankSeg").addEventListener("click", e => { const b = e.target.closest("button[data-t]"); if (!b || b.disabled) return; STATE.rankType = b.dataset.t; renderRanking(); });
 $("#rangeSeg").addEventListener("click", e => { const b = e.target.closest("button[data-r]"); if (!b) return; STATE.range = +b.dataset.r;
   document.querySelectorAll("#rangeSeg button").forEach(x => x.setAttribute("aria-pressed", x === b)); drawProg(); drawHist(); });
