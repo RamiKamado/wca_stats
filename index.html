@@ -28,7 +28,7 @@
   --ink:#121620; --muted:#576074; --faint:#8b93a5; --line:#dce1e9;
   --accent:#2a78d6; --accent-ink:#1c5cab; --avg:#eb6834;
   --gold:#b48d14; --silver:#8a949f; --bronze:#a5622b; --bad:#c43c3b;
-  --rec-nr:#16855e; --rec-cr:#b86e00; --rec-wr:#c8323a;
+  --rec-nr:#16855e; --rec-cr:#b86e00; --rec-wr:#c8323a; --live:#6d4fd8;
   --band:#111827; --band-ink:#f2f4f8; --band-muted:#9aa4b8; --band-field:#1e2738; --band-line:#334059;
   --f-display:"Barlow Condensed","Arial Narrow","Hiragino Sans",sans-serif;
   --f-body:"IBM Plex Sans JP","Hiragino Sans","Noto Sans JP","Yu Gothic",sans-serif;
@@ -38,12 +38,12 @@
   --bg:#0f1218; --surface:#171b23; --sunk:#1f2530;
   --ink:#edf0f5; --muted:#a3abba; --faint:#76808f; --line:#2a313d;
   --accent:#3987e5; --accent-ink:#86b6ef; --avg:#d95926;
-  --gold:#d6ad35; --silver:#aab3be; --bronze:#c98450; --bad:#e66767; --rec-nr:#1f9b6e; --rec-cr:#c98500; --rec-wr:#e0484f; --band:#0a0d13; --band-field:#161c28; --band-line:#2a3345; color-scheme:dark; } }
+  --gold:#d6ad35; --silver:#aab3be; --bronze:#c98450; --bad:#e66767; --rec-nr:#1f9b6e; --rec-cr:#c98500; --rec-wr:#e0484f; --live:#a493f0; --band:#0a0d13; --band-field:#161c28; --band-line:#2a3345; color-scheme:dark; } }
 :root[data-theme="dark"]{
   --bg:#0f1218; --surface:#171b23; --sunk:#1f2530;
   --ink:#edf0f5; --muted:#a3abba; --faint:#76808f; --line:#2a313d;
   --accent:#3987e5; --accent-ink:#86b6ef; --avg:#d95926;
-  --gold:#d6ad35; --silver:#aab3be; --bronze:#c98450; --bad:#e66767; --rec-nr:#1f9b6e; --rec-cr:#c98500; --rec-wr:#e0484f; --band:#0a0d13; --band-field:#161c28; --band-line:#2a3345; color-scheme:dark; }
+  --gold:#d6ad35; --silver:#aab3be; --bronze:#c98450; --bad:#e66767; --rec-nr:#1f9b6e; --rec-cr:#c98500; --rec-wr:#e0484f; --live:#a493f0; --band:#0a0d13; --band-field:#161c28; --band-line:#2a3345; color-scheme:dark; }
 
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
@@ -219,6 +219,12 @@ details.comp[open] summary{background:var(--sunk)}
 .rec-nr{background:var(--rec-nr)}.rec-cr{background:var(--rec-cr)}.rec-wr{background:var(--rec-wr)}
 .tag.pb{background:transparent;color:var(--accent-ink);border:1px solid var(--accent);padding:0 5px}
 .recnote{font-size:12.5px;color:var(--faint)}
+.tag.live{background:transparent;color:var(--live);border:1px solid var(--live);padding:0 5px;font-weight:600}
+.prov{font-size:11.5px;color:var(--live);margin-left:4px;white-space:nowrap}
+.livenote{font-size:13px;color:var(--muted);margin-top:4px;display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
+.livenote:empty{display:none}
+.livenote.err{color:var(--bad)}
+.livenote b{color:var(--live);font-weight:600}
 .ast{display:inline-block;width:1em;text-align:right;color:var(--faint)}
 .ycap{caption-side:bottom;text-align:left;font-size:12px;color:var(--faint);padding:8px 12px 12px;white-space:normal;border-top:1px solid var(--line)}
 .homehint{font-size:12.5px;color:var(--faint);flex-basis:100%}
@@ -264,6 +270,7 @@ footer{margin-top:48px;padding-top:16px;border-top:1px solid var(--line);color:v
 </div>
 <div class="wrap">
   <div class="status" id="status" role="status" aria-live="polite"></div>
+  <div class="livenote" id="liveNote" role="status" aria-live="polite"></div>
   <div class="cands" id="cands"></div>
 
   <div class="intro panel" id="intro">
@@ -376,7 +383,7 @@ footer{margin-top:48px;padding-top:16px;border-top:1px solid var(--line);color:v
   </main>
 
   <footer>
-    データ: World Cube Association の公開成績データ（<a href="https://github.com/robiningelbrecht/wca-rest-api" target="_blank" rel="noopener">wca-rest-api</a> によるミラー、通常1日1回更新）。名前検索は <a href="https://www.worldcubeassociation.org/" target="_blank" rel="noopener">WCA公式API</a> を使用。<br>
+    データ: World Cube Association の公開成績データ（<a href="https://github.com/robiningelbrecht/wca-rest-api" target="_blank" rel="noopener">wca-rest-api</a> によるミラー、通常1日1回更新）。名前検索と記録バッジは <a href="https://www.worldcubeassociation.org/" target="_blank" rel="noopener">WCA公式API</a>、公式記録に未反映の大会の速報は <a href="https://live.worldcubeassociation.org/" target="_blank" rel="noopener">WCA Live</a> を使用。<br>
     このページはWCAの公式サービスではありません。最新・正式な記録はWCA公式サイトの個人ページで確認してください。
   </footer>
 </div>
@@ -498,6 +505,7 @@ function setStatus(html, isErr){ const s = $("#status"); s.innerHTML = html; s.c
 let loadToken = 0;
 async function loadId(id){
   const my = ++loadToken;
+  LIVE = {id:null, state:"idle", comps:[]}; updateLiveNote();
   $("#cands").innerHTML = "";
   setStatus(`<span>${esc(id)} の成績を取得中…</span>`);
   let person;
@@ -523,6 +531,7 @@ async function loadId(id){
   try { localStorage.setItem("wca-last-id", person.id); } catch(e){}
   try { history.replaceState(null, "", location.pathname + "?id=" + encodeURIComponent(person.id)); } catch(e){}
   showHomeHint(person);
+  loadLive(person, comps, my);
 }
 
 async function onSearch(q){
@@ -554,6 +563,106 @@ async function onSearch(q){
   $("#cands").innerHTML = list.slice(0,30).map(p => `<button type="button" data-id="${esc(p.id)}">${esc(p.name)}<small>${esc(p.id)} · ${esc(regionName(p.country))}</small></button>`).join("");
 }
 
+/* ---------- WCA Live: 公式記録に未反映の大会（開催中・終了直後）の速報 ---------- */
+const LIVE_API = "https://live.worldcubeassociation.org/api";
+const LIVE_DAYS = 35;   // 開始日がこの日数以内の大会を確認する（公式記録への反映には通常数日〜1週間ほどかかる）
+const LIVE_FORMATS = {"1":"Best of 1","2":"Best of 2","3":"Best of 3","5":"Best of 5","m":"Mean of 3","a":"Average of 5"};
+const LIVE_CR = {"Asia":"AsR","Europe":"ER","North America":"NAR","South America":"SAR","Africa":"AfR","Oceania":"OcR"};
+let LIVE = {id:null, state:"idle", comps:[]};
+
+async function gql(query){
+  const res = await fetch(LIVE_API, {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({query})});
+  if (!res.ok) throw new Error("HTTP " + res.status);
+  const j = await res.json();
+  if (!j.data) throw new Error(j.errors?.[0]?.message || "no data");
+  return j.data;
+}
+function liveRoundName(number, total){
+  if (number === total) return "Final";
+  if (number === 1) return "First round";
+  if (number === 3 && total === 4) return "Semi Final";
+  return "Second round";
+}
+function liveTag(tag, continent){
+  if (tag === "WR" || tag === "NR") return tag;
+  if (tag === "CR") return LIVE_CR[continent] || "CR";
+  return null; // PR（自己ベスト）はこのページで計算するので使わない
+}
+async function loadLive(person, comps, token){
+  const id = person.id;
+  LIVE = {id, state:"loading", comps:[]}; updateLiveNote();
+  try {
+    const now = Date.now();
+    const from = new Date(now - LIVE_DAYS*day).toISOString().slice(0,10);
+    const until = new Date(now + day).toISOString().slice(0,10);
+    const list = (await gql(`{ competitions(from: "${from}") { id wcaId name startDate endDate venues { country { iso2 } } } }`)).competitions || [];
+    const known = new Set(Object.keys(person.results || {}));
+    const cands = list.filter(c => c.startDate <= until && !known.has(c.wcaId));
+    // 参加者一覧からこの選手を探す（まとめて問い合わせる）
+    const chunks = [];
+    for (let i = 0; i < cands.length; i += 40) chunks.push(cands.slice(i, i + 40));
+    const found = [];
+    await Promise.all(chunks.map(async ch => {
+      const q = "{" + ch.map((c,k) => `c${k}: competition(id: ${JSON.stringify(String(c.id))}) { competitors { id wcaId } }`).join(" ") + "}";
+      const d = await gql(q);
+      ch.forEach((c,k) => { const p = d[`c${k}`]?.competitors?.find(x => x.wcaId === id); if (p) found.push({comp:c, pid:p.id}); });
+    }));
+    if (token !== loadToken) return;
+    let live = [];
+    if (found.length) {
+      const q = "{" + found.map((f,k) => `p${k}: person(id: ${JSON.stringify(String(f.pid))}) { country { continentName } results { ranking best average singleRecordTag averageRecordTag attempts { result } round { number finished format { id } competitionEvent { event { id } rounds { id } } } } }`).join(" ") + "}";
+      const d = await gql(q);
+      live = found.map((f,k) => ({comp:f.comp, p:d[`p${k}`]}));
+    }
+    if (token !== loadToken) return;
+    const merged = mergeLive(person, comps, live);
+    LIVE = {id, state:"ok", comps:merged.added};
+    if (merged.added.length) render(merged.person, merged.comps);
+  } catch(e) {
+    if (token !== loadToken) return;
+    LIVE = {id, state:"error", comps:[]};
+  }
+  updateLiveNote();
+}
+function mergeLive(person, comps, live){
+  const P = {...person, results:{...(person.results || {})}}, C = {...comps}, added = [];
+  for (const {comp, p} of live) {
+    if (!p) continue;
+    const cont = p.country?.continentName, evs = {};
+    let open = false;
+    for (const x of p.results || []) {
+      const att = (x.attempts || []).map(a => a.result);
+      if (!att.some(v => v !== 0)) continue;           // まだ競技していないラウンド
+      const rd = x.round, eid = rd.competitionEvent.event.id;
+      if (!rd.finished) open = true;
+      (evs[eid] ??= []).push({
+        round: liveRoundName(rd.number, rd.competitionEvent.rounds.length),
+        position: x.ranking ?? null, best: x.best ?? 0, average: x.average ?? 0,
+        format: LIVE_FORMATS[rd.format.id] || rd.format.id, solves: att,
+        live: true, finished: !!rd.finished,
+        liveRecS: liveTag(x.singleRecordTag, cont), liveRecA: liveTag(x.averageRecordTag, cont)
+      });
+    }
+    if (!Object.keys(evs).length) continue;
+    P.results[comp.wcaId] = evs;
+    C[comp.wcaId] = {name:comp.name, city:"", country:comp.venues?.[0]?.country?.iso2 || "", date:comp.startDate, end:comp.endDate, live:true};
+    added.push({id:comp.wcaId, name:comp.name, open});
+  }
+  P.numberOfCompetitions = (person.numberOfCompetitions ?? Object.keys(person.results || {}).length) + added.length;
+  return {person:P, comps:C, added};
+}
+function updateLiveNote(){
+  const n = $("#liveNote"); if (!n) return;
+  n.classList.toggle("err", LIVE.state === "error");
+  if (LIVE.state === "loading") n.innerHTML = `<span>WCA Liveで公式記録に未反映の大会を確認中…</span>`;
+  else if (LIVE.state === "error") n.innerHTML = `<span>WCA Liveに接続できなかったため、公式記録に未反映の大会の速報は表示していません。</span>`;
+  else if (LIVE.state === "ok" && LIVE.comps.length) n.innerHTML = `<b>WCA Live 速報</b><span>${LIVE.comps.map(c => esc(c.name) + (c.open ? "（競技中）" : "")).join("・")} の結果を追加しました。公式記録に反映されるまでは暫定の結果です。</span>`;
+  else if (LIVE.state === "ok") n.innerHTML = `<span>WCA Live: 公式記録に未反映の大会はありません（直近${LIVE_DAYS}日）</span>`;
+  else n.innerHTML = "";
+}
+const liveTagHTML = c => c?.live ? ` <span class="tag live" title="WCA Liveの速報。公式記録への反映前の暫定結果です">速報</span>` : "";
+const provHTML = r => r.live && !r.finished ? `<span class="prov" title="このラウンドはまだ終わっていません">暫定</span>` : "";
+
 /* ---------- regional record markers (WCA official API) ---------- */
 let RECS = {id:null, state:"idle", map:null};
 const recKey = (cid, eid, best, avg) => `${cid}|${eid}|${best}|${avg}`;
@@ -581,6 +690,7 @@ function applyRecs(){
   if (!STATE) return;
   const ok = RECS.state === "ok" && RECS.id === STATE.person.id;
   for (const r of STATE.rounds) {
+    if (r.live) { r.recS = r.liveRecS; r.recA = r.liveRecA; continue; }
     const m = ok ? RECS.map.get(recKey(r.cid, r.eid, r.best, r.average)) : null;
     r.recS = m?.s || null; r.recA = m?.a || null;
   }
@@ -602,7 +712,8 @@ function analyze(person, comps){
     const m = comps[cid] || null;
     const date = m?.date || fallbackDate(cid);
     for (const [eid, rs] of Object.entries(evs)) for (const r of rs)
-      rounds.push({cid, m, date, eid, round:r.round, ro:RO[r.round] ?? 2, position:r.position, best:r.best, average:r.average, format:r.format, solves:r.solves || []});
+      rounds.push({cid, m, date, eid, round:r.round, ro:RO[r.round] ?? 2, position:r.position, best:r.best, average:r.average, format:r.format, solves:r.solves || [],
+        live:!!r.live, finished:r.finished !== false, liveRecS:r.liveRecS || null, liveRecA:r.liveRecA || null});
   }
   rounds.sort((a,b) => a.date.localeCompare(b.date) || a.cid.localeCompare(b.cid) || ev(a.eid).order - ev(b.eid).order || a.ro - b.ro);
   const E = {}; const pbRound = new Map();
@@ -610,7 +721,7 @@ function analyze(person, comps){
   for (const r of rounds) {
     const e = E[r.eid] ??= {eid:r.eid, rounds:[], solves:[], dnf:0, dns:0, finals:0, pod:[0,0,0], pbS:[], pbA:[], comps:new Set(), years:{}};
     e.rounds.push(r); e.comps.add(r.cid);
-    if (r.round === "Final") { e.finals++; if (r.best > 0 && r.position >= 1 && r.position <= 3) e.pod[r.position-1]++; }
+    if (r.round === "Final") { e.finals++; if (r.finished && r.best > 0 && r.position >= 1 && r.position <= 3) e.pod[r.position-1]++; }
     const y = r.date.slice(0,4);
     const Y = e.years[y] ??= {rounds:0, valid:0, att:0, sum:0, bestS:null, bestA:null, rbSum:0, rbN:0, raSum:0, raN:0, raDnf:0};
     Y.rounds++;
@@ -711,10 +822,13 @@ function renderPB(){
   <tr><th class="bl">記録</th><th>世界</th><th>大陸</th><th>国内</th><th class="bl">記録</th><th>世界</th><th>大陸</th><th>国内</th></tr></thead><tbody>`;
   for (const id of ids) {
     const e = E[id]; const s = rS[id], a = rA[id];
-    const bestS = s?.best ?? e?.pbS.at(-1)?.v, bestA = a?.best ?? e?.pbA.at(-1)?.v;
+    const lastS = e?.pbS.at(-1), lastA = e?.pbA.at(-1);
+    const liveS = lastS?.r.live && (!s || key(id, lastS.v) < key(id, s.best)), liveA = lastA?.r.live && (!a || key(id, lastA.v) < key(id, a.best));
+    const bestS = liveS ? lastS.v : (s?.best ?? lastS?.v), bestA = liveA ? lastA.v : (a?.best ?? lastA?.v);
+    const liveMark = (on, off) => on ? ` <span class="tag live" title="WCA Liveの速報で自己ベストを更新。${off ? "公式記録は " + off + "。" : ""}順位は公式記録のものです">速報</span>` : "";
     h += `<tr data-eid="${esc(id)}" class="${id===STATE.eid?"sel":""}" tabindex="0"><td class="l"><span class="evname">${esc(ev(id).name)}</span></td>
-      <td class="num bl"><b>${bestS ? fmtVal(id, bestS, false) : ""}</b></td>${s ? rankCells(s.rank) : '<td></td><td></td><td></td>'}
-      <td class="num bl"><b>${bestA ? fmtVal(id, bestA, true) : ""}</b></td>${a ? rankCells(a.rank) : '<td></td><td></td><td></td>'}
+      <td class="num bl"><b>${bestS ? fmtVal(id, bestS, false) : ""}</b>${liveMark(liveS, s ? fmtVal(id, s.best, false) : "")}</td>${s ? rankCells(s.rank) : '<td></td><td></td><td></td>'}
+      <td class="num bl"><b>${bestA ? fmtVal(id, bestA, true) : ""}</b>${liveMark(liveA, a ? fmtVal(id, a.best, true) : "")}</td>${a ? rankCells(a.rank) : '<td></td><td></td><td></td>'}
       <td class="num bl">${e ? e.comps.size : ""}</td><td>${e ? podHTML(e.pod) : ""}</td></tr>`;
   }
   $("#pbTable").innerHTML = h + "</tbody>";
@@ -837,8 +951,8 @@ function renderRanking(){
     const r = x.r;
     const detail = isAvg ? `<td class="solves">${solvesHTML(r)}</td>` : `<td class="l num">${(x.i ?? 0) + 1}本目 <span class="zero">/ ${r.solves.filter(v => v !== 0).length}</span></td>`;
     return `<tr class="${x.rank <= 3 && !worst ? "top3" : ""}"><td class="pos l">${x.rank}</td><td class="val">${esc(fmtVal(eid, x.v, isAvg))}${badge(isAvg ? r.recA : (x.first ? r.recS : null))}${x.pb ? ' <span class="tag pb">PB</span>' : ""}</td>
-      <td class="l num">${esc(r.date)}</td><td class="l cmp" title="${esc(compLabel(r))}">${esc(compLabel(r))}</td>
-      <td class="l">${esc(RJ[r.round] || r.round)} <span class="zero">${esc(FJ[r.format] || "")}</span></td>${detail}</tr>`;
+      <td class="l num">${esc(r.date)}</td><td class="l cmp" title="${esc(compLabel(r))}">${esc(compLabel(r))}${liveTagHTML(r.m)}</td>
+      <td class="l">${esc(RJ[r.round] || r.round)} <span class="zero">${esc(FJ[r.format] || "")}</span>${provHTML(r)}</td>${detail}</tr>`;
   }).join("");
   if (!top.length) h += `<tr><td class="l" colspan="6"><span class="zero">${R ? "この期間の記録はありません" : "記録なし"}</span></td></tr>`;
   $("#rankTable").innerHTML = h + "</tbody>";
@@ -1102,8 +1216,8 @@ function renderHistory(){
       const t = pbRound.get(r) || "";
       const first = r.cid !== prevC; prevC = r.cid;
       rows += `<tr class="${first ? "newcomp" : ""} ${r.recS || r.recA ? "hasrec" : ""}">
-        <td class="l comp" title="${esc(compLabel(r))}">${first ? `${esc(compLabel(r))}<small>${esc(r.date)}</small>` : ""}</td>
-        <td class="l">${esc(RJ[r.round] || r.round)}</td><td class="num">${r.position ?? ""}</td>
+        <td class="l comp" title="${esc(compLabel(r))}">${first ? `${esc(compLabel(r))}${liveTagHTML(r.m)}<small>${esc(r.date)}</small>` : ""}</td>
+        <td class="l">${esc(RJ[r.round] || r.round)}${provHTML(r)}</td><td class="num">${r.position ?? ""}</td>
         <td class="val"><b>${esc(fmtVal(id, r.best, false))}</b>${badge(r.recS)}${t.includes("S") ? ' <span class="tag pb">PB</span>' : ""}</td>
         <td class="val"><b>${esc(fmtVal(id, r.average, true))}</b>${badge(r.recA)}${t.includes("A") ? ' <span class="tag pb">PB</span>' : ""}</td>
         <td class="solves">${solvesHTML(r)}</td></tr>`;
@@ -1142,17 +1256,17 @@ function renderLog(){
   const shown = list.slice(0, STATE.logShown);
   $("#compLog").innerHTML = shown.length ? shown.map(c => {
     const rs = c.rounds.filter(r => !fe || r.eid === fe).sort((a,b) => ev(a.eid).order - ev(b.eid).order || b.ro - a.ro);
-    const pods = c.rounds.filter(r => r.round === "Final" && r.best > 0 && r.position <= 3);
+    const pods = c.rounds.filter(r => r.round === "Final" && r.finished && r.best > 0 && r.position <= 3);
     const pbs = c.rounds.filter(r => pbRound.has(r)).length;
     const evCount = new Set(c.rounds.map(r => r.eid)).size;
     const cls = ["gold","silver","bronze"];
     return `<details class="comp"><summary><span class="cdate">${esc(c.date)}</span>
-      <span class="cname">${esc(c.name)}<small>${esc(c.city)}${c.city ? " · " : ""}${esc(regionName(c.country))}</small></span>
+      <span class="cname">${esc(c.name)}${liveTagHTML(c.m)}<small>${esc(c.city)}${c.city ? " · " : ""}${esc(regionName(c.country))}</small></span>
       <span class="cright">${champ.has(c.cid) ? `<span class="tag champ">選手権</span>` : ""}${c.rounds.flatMap(r => [r.recS, r.recA]).filter(Boolean).map(badge).join("")}${pbs ? `<span class="tag pb">PB ${pbs}</span>` : ""}
         ${pods.length ? `<span class="pods">${pods.map(r => `<span title="${esc(ev(r.eid).name)} ${r.position}位"><i class="d-${cls[r.position-1]}"></i>${esc(ev(r.eid).name.replace(/（.*）/,""))}</span>`).join("")}</span>` : ""}
         <span>${evCount}種目</span></span></summary>
       <div class="inner"><table><thead><tr><th class="l">種目</th><th class="l">ラウンド</th><th>順位</th><th>単発</th><th>平均</th><th class="l">記録</th></tr></thead><tbody>
-      ${rs.map(r => { const t = pbRound.get(r) || ""; return `<tr><td class="l">${esc(ev(r.eid).name)}</td><td class="l">${esc(RJ[r.round] || r.round)} <span class="zero">${esc(FJ[r.format] || "")}</span></td>
+      ${rs.map(r => { const t = pbRound.get(r) || ""; return `<tr><td class="l">${esc(ev(r.eid).name)}</td><td class="l">${esc(RJ[r.round] || r.round)} <span class="zero">${esc(FJ[r.format] || "")}</span>${provHTML(r)}</td>
         <td class="num">${r.position ?? ""}</td><td class="num">${esc(fmtVal(r.eid, r.best, false))}${badge(r.recS)}${t.includes("S") ? ' <span class="tag pb">PB</span>' : ""}</td>
         <td class="num">${esc(fmtVal(r.eid, r.average, true))}${badge(r.recA)}${t.includes("A") ? ' <span class="tag pb">PB</span>' : ""}</td><td class="solves">${solvesHTML(r)}</td></tr>`; }).join("")}
       </tbody></table></div></details>`;
