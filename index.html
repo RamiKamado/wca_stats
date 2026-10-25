@@ -301,7 +301,7 @@ footer{margin-top:48px;padding-top:16px;border-top:1px solid var(--line);color:v
     <section id="secPB">
       <h2>自己ベストとランキング <small>行をクリックすると種目の詳細へ</small></h2>
       <p class="lede">単発・平均のPBと世界/大陸/国内順位（WCA公式ランキング）。表彰台は決勝ラウンドでの1〜3位の回数です。</p>
-      <p class="lede" id="pbLiveNote" hidden><span class="tag live">速報</span> の記録の順位は「公式の順位→速報の記録での順位」です。速報の順位は公式ランキングの上位1000人のデータから計算しています。1000位より下になる場合は「?」と表示します。</p>
+      <p class="lede" id="pbLiveNote" hidden><span class="tag live">速報</span> の記録の順位は「公式の順位→速報の記録での順位」です。公式ランキングの上位1000人に、直近35日にWCA Liveで行われた大会での他の選手の速報を加えて計算しています。1000位より下になる場合は「?」と表示します。 <span class="recnote" id="pbOthersNote"></span></p>
       <div class="panel scroll"><table id="pbTable"></table></div>
     </section>
 
@@ -510,6 +510,7 @@ let loadToken = 0;
 async function loadId(id){
   const my = ++loadToken;
   LIVE = {id:null, state:"idle", comps:[]}; updateLiveNote();
+  LIVE_OTHERS.clear();
   $("#cands").innerHTML = "";
   setStatus(`<span>${esc(id)} の成績を取得中…</span>`);
   let person;
@@ -620,7 +621,7 @@ async function loadLive(person, comps, token){
     }
     if (token !== loadToken) return;
     const merged = mergeLive(person, comps, live);
-    LIVE = {id, state:"ok", comps:merged.added};
+    LIVE = {id, state:"ok", comps:merged.added, list:list.filter(c => c.startDate <= until)};
     if (merged.added.length) { render(merged.person, merged.comps); computeLiveRanks(); }
   } catch(e) {
     if (token !== loadToken) return;
@@ -820,8 +821,10 @@ function rankCells(r, ch){
     let nu;
     if (!x) nu = `<span class="zero" title="計算中">…</span>`;
     else if (x.state === "ok") {
-      if (x.rank === old) return `<td class="num rk">${c(old)}</td>`;
-      nu = `<span class="rknew">${fmtNum(x.rank)}</span>`;
+      const why = x.extra == null ? "他の選手の速報は含んでいません"
+        : `公式ランキングでの順位 ${fmtNum(x.base)}位＋他の選手の速報で上回った人 ${x.extra}人`;
+      if (x.rank === old) return `<td class="num rk" title="${why}">${c(old)}</td>`;
+      nu = `<span class="rknew" title="${why}">${fmtNum(x.rank)}</span>`;
     }
     else if (x.state === "beyond") nu = `<span class="zero" title="公式ランキング上位${x.n}人のデータで計算しているため、${x.n}位より下の順位は計算できません">?</span>`;
     else nu = `<span class="zero" title="順位のデータを取得できませんでした">?</span>`;
@@ -843,20 +846,66 @@ function livePBList(){
   return out;
 }
 const LIVE_CONT_ID = {"Asia":"asia","Europe":"europe","North America":"north-america","South America":"south-america","Africa":"africa","Oceania":"oceania"};
-/* 速報の記録が公式ランキングで何位になるかを、ミラーのランキング（各地域の上位1000人）から計算する */
+/* 他の選手の速報：直近の WCA Live の大会から、指定した種目の各選手のベストを集める */
+const LIVE_OTHERS = new Map();          // 種目ID -> Promise<Map(選手 -> {wcaId, iso2, cont, single, average})>
+let LIVE_OTHERS_STAT = null;            // {comps, rounds}
+async function pool(tasks, n){
+  let i = 0;
+  await Promise.all(Array.from({length:Math.min(n, tasks.length)}, async () => { while (i < tasks.length) await tasks[i++](); }));
+}
+function liveOthers(eids, comps){
+  const need = eids.filter(e => !LIVE_OTHERS.has(e));
+  if (need.length) {
+    const job = (async () => {
+      // 1) 各大会の種目とラウンド
+      const rounds = [];
+      const cch = []; for (let i = 0; i < comps.length; i += 40) cch.push(comps.slice(i, i + 40));
+      await pool(cch.map(ch => async () => {
+        const d = await gql("{" + ch.map((c,k) => `c${k}: competition(id: ${JSON.stringify(String(c.id))}) { competitionEvents { event { id } rounds { id } } }`).join(" ") + "}");
+        ch.forEach((c,k) => (d[`c${k}`]?.competitionEvents || []).forEach(ce => {
+          if (need.includes(ce.event.id)) ce.rounds.forEach(r => rounds.push({rid:r.id, eid:ce.event.id, cid:c.id}));
+        }));
+      }), 4);
+      // 2) 各ラウンドの結果から、選手ごとのベスト（単発・平均）を集める
+      const maps = Object.fromEntries(need.map(e => [e, new Map()]));
+      const rch = []; for (let i = 0; i < rounds.length; i += 8) rch.push(rounds.slice(i, i + 8));
+      await pool(rch.map(ch => async () => {
+        const d = await gql("{" + ch.map((r,k) => `r${k}: round(id: ${JSON.stringify(String(r.rid))}) { results { best average person { id wcaId country { iso2 continentName } } } }`).join(" ") + "}");
+        ch.forEach((r,k) => (d[`r${k}`]?.results || []).forEach(x => {
+          const pp = x.person || {}, pk = pp.wcaId || `${r.cid}:${pp.id}`, m = maps[r.eid];
+          const o = m.get(pk) || {wcaId:pp.wcaId || null, iso2:pp.country?.iso2 || null, cont:pp.country?.continentName || null, single:0, average:0};
+          if (x.best > 0 && (!o.single || key(r.eid, x.best) < key(r.eid, o.single))) o.single = x.best;
+          if (x.average > 0 && (!o.average || key(r.eid, x.average) < key(r.eid, o.average))) o.average = x.average;
+          m.set(pk, o);
+        }));
+      }), 4);
+      LIVE_OTHERS_STAT = {comps:comps.length, rounds:rounds.length};
+      return maps;
+    })();
+    need.forEach(e => LIVE_OTHERS.set(e, job.then(m => m[e])));
+    job.catch(() => need.forEach(e => LIVE_OTHERS.delete(e)));
+  }
+  return Promise.all(eids.map(e => LIVE_OTHERS.get(e)));
+}
+
+/* 速報の記録が何位になるかを計算する
+   公式ランキング（ミラーの各地域上位1000人）で上にいる人数 ＋ 他の選手の速報で新たに上回った人数 */
 async function computeLiveRanks(){
   const st = STATE; if (!st) return;
   const list = livePBList(); if (!list.length) return;
-  st.liveRanks = {};
-  const regions = {world:"world", continent:LIVE_CONT_ID[st.person.liveContinent] || null, country:st.person.country || null};
-  await Promise.all(list.map(async x => {
-    const res = {};
+  st.liveRanks = {}; st.othersState = "loading"; updateOthersNote(st);
+  const me = st.person.id, myCont = st.person.liveContinent || null, myCtry = st.person.country || null;
+  const regions = {world:"world", continent:LIVE_CONT_ID[myCont] || null, country:myCtry};
+  const eids = [...new Set(list.map(x => x.eid))];
+  const othersP = liveOthers(eids, LIVE.list || []).then(arr => Object.fromEntries(eids.map((e,i) => [e, arr[i]]))).catch(() => null);
+
+  const official = await Promise.all(list.map(async x => {
+    const res = {}, target = key(x.eid, x.v);
     await Promise.all(Object.entries(regions).map(async ([k, reg]) => {
       if (!reg) { res[k] = {state:"err"}; return; }
       try {
         const j = await fetchJSON(DATA_SRC + `rank/${encodeURIComponent(reg)}/${x.type}/${encodeURIComponent(x.eid)}.json`);
         const items = j.items || [], total = j.total ?? items.length;
-        const target = key(x.eid, x.v);
         // 記録順に並べ、同じ選手の重複や順位が前後するデータを除く
         const arr = items.map((it, n) => ({b:key(x.eid, it.best), r:it.rank?.[k], p:it.personId, n}))
           .filter(o => o.r != null).sort((a, b) => a.b - b.b || a.r - b.r || a.n - b.n);
@@ -866,16 +915,46 @@ async function computeLiveRanks(){
           if (seen.has(o.p) || (last && o.r < last.r)) continue;
           seen.add(o.p); clean.push(o);
         }
-        // 速報の記録以上（同記録を含む）で最も良い人の順位が、速報の記録の順位になる
+        const better = new Set(clean.filter(o => o.b < target).map(o => o.p));   // 公式ですでに上にいる選手
+        // 速報の記録以上（同記録を含む）で最も良い人の順位が、公式だけで見た順位になる
         const f = clean.find(o => o.b >= target);
-        if (f) res[k] = {state:"ok", rank:f.r};
-        else if (items.length >= total) res[k] = {state:"ok", rank:clean.length + 1};
+        if (f) res[k] = {state:"ok", rank:f.r, better};
+        else if (items.length >= total) res[k] = {state:"ok", rank:clean.length + 1, better};
         else res[k] = {state:"beyond", n:items.length};
       } catch(e) { res[k] = {state:"err"}; }
     }));
-    (st.liveRanks[x.eid] ??= {})[x.type] = res;
+    return {x, res, target};
   }));
-  if (STATE === st) renderPB();
+
+  const others = await othersP;
+  for (const {x, res, target} of official) {
+    for (const k of Object.keys(res)) {
+      const o = res[k]; if (o.state !== "ok") continue;
+      o.base = o.rank;
+      if (!others) continue;
+      let extra = 0;
+      for (const p of (others[x.eid]?.values() || [])) {
+        if (p.wcaId === me) continue;
+        if (k === "continent" && p.cont !== myCont) continue;
+        if (k === "country" && p.iso2 !== myCtry) continue;
+        const v = x.type === "single" ? p.single : p.average;
+        if (!(v > 0) || key(x.eid, v) >= target) continue;
+        if (p.wcaId && o.better.has(p.wcaId)) continue;   // 公式ですでに数えている
+        extra++;
+      }
+      o.extra = extra; o.rank = o.base + extra;
+    }
+    (st.liveRanks[x.eid] ??= {})[x.type] = res;
+  }
+  st.othersState = others ? "ok" : "error";
+  if (STATE === st) { renderPB(); updateOthersNote(st); }
+}
+function updateOthersNote(st){
+  const n = $("#pbOthersNote"); if (!n || STATE !== st) return;
+  n.classList.toggle("err", st.othersState === "error");
+  n.textContent = st.othersState === "loading" ? "他の選手の速報を確認中…"
+    : st.othersState === "error" ? "他の選手の速報を取得できなかったため、公式ランキングだけで計算しています。"
+    : st.othersState === "ok" && LIVE_OTHERS_STAT ? `他の選手の速報: ${LIVE_OTHERS_STAT.comps}大会・${LIVE_OTHERS_STAT.rounds}ラウンドを確認しました。` : "";
 }
 function podHTML(p){
   const cls = ["gold","silver","bronze"];
