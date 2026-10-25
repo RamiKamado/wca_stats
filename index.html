@@ -220,6 +220,9 @@ details.comp[open] summary{background:var(--sunk)}
 .tag.pb{background:transparent;color:var(--accent-ink);border:1px solid var(--accent);padding:0 5px}
 .recnote{font-size:12.5px;color:var(--faint)}
 .tag.live{background:transparent;color:var(--live);border:1px solid var(--live);padding:0 5px;font-weight:600}
+.rkold{color:var(--faint)}
+.rkarrow{color:var(--faint);margin:0 2px}
+.rknew{color:var(--live);font-weight:700}
 .prov{font-size:11.5px;color:var(--live);margin-left:4px;white-space:nowrap}
 .livenote{font-size:13px;color:var(--muted);margin-top:4px;display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
 .livenote:empty{display:none}
@@ -298,6 +301,7 @@ footer{margin-top:48px;padding-top:16px;border-top:1px solid var(--line);color:v
     <section id="secPB">
       <h2>自己ベストとランキング <small>行をクリックすると種目の詳細へ</small></h2>
       <p class="lede">単発・平均のPBと世界/大陸/国内順位（WCA公式ランキング）。表彰台は決勝ラウンドでの1〜3位の回数です。</p>
+      <p class="lede" id="pbLiveNote" hidden><span class="tag live">速報</span> の記録の順位は「公式の順位→速報の記録での順位」です。速報の順位は公式ランキングの上位1000人のデータから計算しています。1000位より下になる場合は「?」と表示します。</p>
       <div class="panel scroll"><table id="pbTable"></table></div>
     </section>
 
@@ -617,7 +621,7 @@ async function loadLive(person, comps, token){
     if (token !== loadToken) return;
     const merged = mergeLive(person, comps, live);
     LIVE = {id, state:"ok", comps:merged.added};
-    if (merged.added.length) render(merged.person, merged.comps);
+    if (merged.added.length) { render(merged.person, merged.comps); computeLiveRanks(); }
   } catch(e) {
     if (token !== loadToken) return;
     LIVE = {id, state:"error", comps:[]};
@@ -629,6 +633,7 @@ function mergeLive(person, comps, live){
   for (const {comp, p} of live) {
     if (!p) continue;
     const cont = p.country?.continentName, evs = {};
+    if (cont) P.liveContinent = cont;
     let open = false;
     for (const x of p.results || []) {
       const att = (x.attempts || []).map(a => a.result);
@@ -803,10 +808,74 @@ function renderTiles(){
   $("#tiles").innerHTML = tiles.map(([k,v,s]) => `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s}</div></div>`).join("");
 }
 
-function rankCells(r){
-  if (!r) return `<td class="num bl"></td><td class="num"></td><td class="num"></td>`;
+function rankCells(r, ch){
   const c = n => n == null ? `<span class="zero">–</span>` : (n <= 10 ? `<span class="nr">${n}</span>` : fmtNum(n));
-  return `<td class="num rk">${c(r.world)}</td><td class="num rk">${c(r.continent)}</td><td class="num rk">${c(r.country)}</td>`;
+  if (!ch) {
+    if (!r) return `<td class="num bl"></td><td class="num"></td><td class="num"></td>`;
+    return `<td class="num rk">${c(r.world)}</td><td class="num rk">${c(r.continent)}</td><td class="num rk">${c(r.country)}</td>`;
+  }
+  // 速報で自己ベストを更新した記録：公式の順位→速報の記録での順位
+  return ["world", "continent", "country"].map(k => {
+    const old = r?.[k] ?? null, x = ch[k];
+    let nu;
+    if (!x) nu = `<span class="zero" title="計算中">…</span>`;
+    else if (x.state === "ok") {
+      if (x.rank === old) return `<td class="num rk">${c(old)}</td>`;
+      nu = `<span class="rknew">${fmtNum(x.rank)}</span>`;
+    }
+    else if (x.state === "beyond") nu = `<span class="zero" title="公式ランキング上位${x.n}人のデータで計算しているため、${x.n}位より下の順位は計算できません">?</span>`;
+    else nu = `<span class="zero" title="順位のデータを取得できませんでした">?</span>`;
+    return `<td class="num rk"><span class="rkold">${old == null ? "–" : fmtNum(old)}</span><span class="rkarrow">→</span>${nu}</td>`;
+  }).join("");
+}
+/* 速報で公式の自己ベストを上回った記録の一覧 */
+function livePBList(){
+  const {person, E} = STATE, out = [];
+  const rS = {}, rA = {};
+  (person.rank?.singles || []).forEach(x => rS[x.eventId] = x);
+  (person.rank?.averages || []).forEach(x => rA[x.eventId] = x);
+  for (const [id, e] of Object.entries(E)) {
+    for (const [type, list, off] of [["single", e.pbS, rS[id]], ["average", e.pbA, rA[id]]]) {
+      const last = list.at(-1);
+      if (last?.r.live && (!off || key(id, last.v) < key(id, off.best))) out.push({eid:id, type, v:last.v, off:off || null});
+    }
+  }
+  return out;
+}
+const LIVE_CONT_ID = {"Asia":"asia","Europe":"europe","North America":"north-america","South America":"south-america","Africa":"africa","Oceania":"oceania"};
+/* 速報の記録が公式ランキングで何位になるかを、ミラーのランキング（各地域の上位1000人）から計算する */
+async function computeLiveRanks(){
+  const st = STATE; if (!st) return;
+  const list = livePBList(); if (!list.length) return;
+  st.liveRanks = {};
+  const regions = {world:"world", continent:LIVE_CONT_ID[st.person.liveContinent] || null, country:st.person.country || null};
+  await Promise.all(list.map(async x => {
+    const res = {};
+    await Promise.all(Object.entries(regions).map(async ([k, reg]) => {
+      if (!reg) { res[k] = {state:"err"}; return; }
+      try {
+        const j = await fetchJSON(DATA_SRC + `rank/${encodeURIComponent(reg)}/${x.type}/${encodeURIComponent(x.eid)}.json`);
+        const items = j.items || [], total = j.total ?? items.length;
+        const target = key(x.eid, x.v);
+        // 記録順に並べ、同じ選手の重複や順位が前後するデータを除く
+        const arr = items.map((it, n) => ({b:key(x.eid, it.best), r:it.rank?.[k], p:it.personId, n}))
+          .filter(o => o.r != null).sort((a, b) => a.b - b.b || a.r - b.r || a.n - b.n);
+        const clean = [], seen = new Set();
+        for (const o of arr) {
+          const last = clean.at(-1);
+          if (seen.has(o.p) || (last && o.r < last.r)) continue;
+          seen.add(o.p); clean.push(o);
+        }
+        // 速報の記録以上（同記録を含む）で最も良い人の順位が、速報の記録の順位になる
+        const f = clean.find(o => o.b >= target);
+        if (f) res[k] = {state:"ok", rank:f.r};
+        else if (items.length >= total) res[k] = {state:"ok", rank:clean.length + 1};
+        else res[k] = {state:"beyond", n:items.length};
+      } catch(e) { res[k] = {state:"err"}; }
+    }));
+    (st.liveRanks[x.eid] ??= {})[x.type] = res;
+  }));
+  if (STATE === st) renderPB();
 }
 function podHTML(p){
   const cls = ["gold","silver","bronze"];
@@ -825,13 +894,14 @@ function renderPB(){
     const lastS = e?.pbS.at(-1), lastA = e?.pbA.at(-1);
     const liveS = lastS?.r.live && (!s || key(id, lastS.v) < key(id, s.best)), liveA = lastA?.r.live && (!a || key(id, lastA.v) < key(id, a.best));
     const bestS = liveS ? lastS.v : (s?.best ?? lastS?.v), bestA = liveA ? lastA.v : (a?.best ?? lastA?.v);
-    const liveMark = (on, off) => on ? ` <span class="tag live" title="WCA Liveの速報で自己ベストを更新。${off ? "公式記録は " + off + "。" : ""}順位は公式記録のものです">速報</span>` : "";
+    const liveMark = (on, off) => on ? ` <span class="tag live" title="WCA Liveの速報で自己ベストを更新。${off ? "公式記録は " + off + "。" : ""}">速報</span>` : "";
     h += `<tr data-eid="${esc(id)}" class="${id===STATE.eid?"sel":""}" tabindex="0"><td class="l"><span class="evname">${esc(ev(id).name)}</span></td>
-      <td class="num bl"><b>${bestS ? fmtVal(id, bestS, false) : ""}</b>${liveMark(liveS, s ? fmtVal(id, s.best, false) : "")}</td>${s ? rankCells(s.rank) : '<td></td><td></td><td></td>'}
-      <td class="num bl"><b>${bestA ? fmtVal(id, bestA, true) : ""}</b>${liveMark(liveA, a ? fmtVal(id, a.best, true) : "")}</td>${a ? rankCells(a.rank) : '<td></td><td></td><td></td>'}
+      <td class="num bl"><b>${bestS ? fmtVal(id, bestS, false) : ""}</b>${liveMark(liveS, s ? fmtVal(id, s.best, false) : "")}</td>${liveS ? rankCells(s?.rank, STATE.liveRanks?.[id]?.single || {}) : s ? rankCells(s.rank) : '<td></td><td></td><td></td>'}
+      <td class="num bl"><b>${bestA ? fmtVal(id, bestA, true) : ""}</b>${liveMark(liveA, a ? fmtVal(id, a.best, true) : "")}</td>${liveA ? rankCells(a?.rank, STATE.liveRanks?.[id]?.average || {}) : a ? rankCells(a.rank) : '<td></td><td></td><td></td>'}
       <td class="num bl">${e ? e.comps.size : ""}</td><td>${e ? podHTML(e.pod) : ""}</td></tr>`;
   }
   $("#pbTable").innerHTML = h + "</tbody>";
+  $("#pbLiveNote").hidden = !livePBList().length;
 }
 
 function renderChips(){
