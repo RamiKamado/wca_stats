@@ -1,0 +1,59 @@
+# サイトを GitHub Pages に公開し、「ランキングの推移」のデータを作ります。
+# - main に push したとき、毎週月曜（日本時間 12:17）、手動実行（Actions タブの「Run workflow」）で動きます。
+# - WCA の結果エクスポートをダウンロードして data/rankhist/ を作り、サイトと一緒に公開します。
+#   データはリポジトリにはコミットしないので、リポジトリが大きくなりません。
+# 事前設定: Settings → Pages → Build and deployment の Source を「GitHub Actions」にしてください。
+name: Build and deploy
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: ランキングの推移データを作成
+        # 失敗してもサイト本体は公開する（その場合「ランキングの推移」はデータなしと表示される）
+        continue-on-error: true
+        run: python tools/build_rank_history.py --out _build
+
+      - name: 公開するファイルをまとめる
+        run: |
+          mkdir -p _site/data
+          rsync -a --exclude '.git' --exclude '.github' --exclude 'tools' --exclude '_build' --exclude '_site' ./ _site/
+          if [ -f _build/rankhist/meta.json ]; then cp -r _build/rankhist _site/data/rankhist; else echo "::warning::ランキングの推移データを作れませんでした"; fi
+          du -sh _site
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
