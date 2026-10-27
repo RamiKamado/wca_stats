@@ -7,15 +7,17 @@
 
 出力（<out>/rankhist/）:
     meta.json              国・大陸・種目ごとのファイル一覧
-    persons.bin.gz         選手ごとの国（uint16、選手番号の順）
     <種目>-single.bin.gz   単発の自己ベスト更新の履歴
     <種目>-average.bin.gz  平均の自己ベスト更新の履歴
 
 種目ファイルの形式（gzip を展開した中身）:
-    "WRH1" + varint(月数) + 月ごとの件数 varint × 月数
-    + 各月の記録（選手番号の昇順）: varint(前の選手番号との差) + varint(記録)
+    "WRH2" + varint(月数) + 月ごとの件数 varint × 月数
+    + 各月の記録（選手番号の昇順）: varint(前の選手番号との差) + varint(記録) + varint(国の番号)
     月は 1982年1月 を 0 とした通し番号（大会の開始日の月）。
     記録は WCA の値そのまま（小さいほど良い。複数目隠しも数値の大小で比べられる形式）。
+    国は「その記録を出したときに代表していた国」（meta.json の countries の番号）。
+    WCA公式ランキングと同じく、大陸・国内ランキングはこの国で数えるため、
+    「選手 × 記録を出した国」ごとの自己ベスト更新を記録している。
 
 外部ライブラリは使いません（Python 3.9 以上の標準ライブラリのみ）。
 """
@@ -134,22 +136,33 @@ def main():
         pidx = {p: i for i, p in enumerate(pids)}
         log("persons", len(pids))
 
-        # 結果を種目ごとにまとめる（選手番号・月・単発・平均）
+        # 結果を種目ごとにまとめる（選手番号・月・単発・平均・記録を出したときの国）
+        rows_it = tsv_rows(z, "results")
+        header = next(rows_it)
+        ci = {c: header.index(c) for c in ("competition_id", "event_id", "person_id", "best", "average")}
+        cc_col = header.index("person_country_id") if "person_country_id" in header else (header.index("country_id") if "country_id" in header else None)
         per_event = {}
         n = 0
         max_result_month = -1
-        for comp, ev, pid, best, avg in table(z, "results", ["competition_id", "event_id", "person_id", "best", "average"]):
-            m = comp_month.get(comp)
+        for r in rows_it:
+            if len(r) < len(header):
+                continue
+            m = comp_month.get(r[ci["competition_id"]])
+            pid = r[ci["person_id"]]
             p = pidx.get(pid)
             if m is None or p is None:
                 continue
-            b, a = int(best), int(avg)
+            b, a = int(r[ci["best"]]), int(r[ci["average"]])
             if b <= 0 and a <= 0:
                 continue
+            cty = country_idx.get(r[cc_col]) if cc_col is not None else None
+            if cty is None:
+                cty = country_idx.get(person_country[pid], 0)
+            ev = r[ci["event_id"]]
             arrs = per_event.get(ev)
             if arrs is None:
-                arrs = per_event[ev] = (array.array("i"), array.array("i"), array.array("q"), array.array("q"))
-            arrs[0].append(p); arrs[1].append(m); arrs[2].append(b); arrs[3].append(a)
+                arrs = per_event[ev] = (array.array("i"), array.array("i"), array.array("q"), array.array("q"), array.array("H"))
+            arrs[0].append(p); arrs[1].append(m); arrs[2].append(b); arrs[3].append(a); arrs[4].append(cty)
             if m > max_result_month:
                 max_result_month = m
             n += 1
@@ -169,56 +182,52 @@ def main():
     log("months", n_months, "last", f"{BASE_YEAR + last_month // 12}/{last_month % 12 + 1:02d}")
     files = {}
     for ev in sorted(per_event):
-        P, M, B, A = per_event[ev]
+        P, M, B, A, C = per_event[ev]
         files[ev] = {}
         for typ, V in (("single", B), ("average", A)):
-            rows = sorted((P[i], M[i], V[i]) for i in range(len(P)) if V[i] > 0)
+            rows = sorted((P[i], C[i], M[i], V[i]) for i in range(len(P)) if V[i] > 0)
             if not rows:
                 continue
-            # 自己ベストを更新した月だけを残す
+            # 「選手 × 記録を出した国」ごとに、自己ベストを更新した月だけを残す
+            # （世界・大陸の自己ベストの更新は、必ずいずれかの国での更新に含まれる）
             imp = []
-            cur, best = -1, None
-            for p, m, v in rows:
-                if p != cur:
-                    cur, best = p, None
+            cur, best = None, None
+            for p, c, m, v in rows:
+                if (p, c) != cur:
+                    cur, best = (p, c), None
                 if best is None or v < best:
-                    if imp and imp[-1][1] == p and imp[-1][0] == m:
-                        imp[-1] = (m, p, v)
+                    if imp and imp[-1][1] == p and imp[-1][3] == c and imp[-1][0] == m:
+                        imp[-1] = (m, p, v, c)
                     else:
-                        imp.append((m, p, v))
+                        imp.append((m, p, v, c))
                     best = v
             imp.sort()
             counts = [0] * n_months
-            for m, _, _ in imp:
-                counts[m] += 1
-            buf = bytearray(b"WRH1")
+            for rec in imp:
+                counts[rec[0]] += 1
+            buf = bytearray(b"WRH2")
             varint(buf, n_months)
             for c in counts:
                 varint(buf, c)
             last_m, last_p = -1, 0
-            for m, p, v in imp:
+            for m, p, v, c in imp:
                 if m != last_m:
                     last_m, last_p = m, 0
                 varint(buf, p - last_p)
                 varint(buf, v)
+                varint(buf, c)
                 last_p = p
             name = f"{ev}-{typ}.bin.gz"
             data = gzip.compress(bytes(buf), compresslevel=9, mtime=0)
             with open(os.path.join(out_dir, name), "wb") as f:
                 f.write(data)
-            files[ev][typ] = {"file": name, "records": len(imp), "persons": len({p for _, p, _ in imp}), "bytes": len(data)}
+            files[ev][typ] = {"file": name, "records": len(imp), "persons": len({rec[1] for rec in imp}), "bytes": len(data)}
             log(ev, typ, "records", len(imp), "gz", len(data))
         if not files[ev]:
             del files[ev]
 
-    pc = array.array("H", (country_idx.get(person_country[p], 0xFFFF) for p in pids))
-    if sys.byteorder != "little":
-        pc.byteswap()
-    with open(os.path.join(out_dir, "persons.bin.gz"), "wb") as f:
-        f.write(gzip.compress(pc.tobytes(), compresslevel=9, mtime=0))
-
     meta = {
-        "version": 1,
+        "version": 2,
         "exportDate": export_date,
         "builtAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "baseYear": BASE_YEAR,

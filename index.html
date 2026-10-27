@@ -316,7 +316,7 @@ footer{margin-top:48px;padding-top:16px;border-top:1px solid var(--line);color:v
 
     <section id="secPB">
       <h2>自己ベストとランキング <small>行をクリックすると種目の詳細へ</small></h2>
-      <p class="lede">単発・平均のPBと世界/大陸/国内順位（WCA公式ランキング）。表彰台は決勝ラウンドでの1〜3位の回数です。</p>
+      <p class="lede">単発・平均のPBと世界/大陸/国内順位（WCA公式ランキング<span id="pbDataDate"></span>）。表彰台は決勝ラウンドでの1〜3位の回数です。</p>
       <p class="lede" id="pbLiveNote" hidden><span class="tag live">速報</span> の記録の順位は「公式の順位→速報の記録での順位」です。公式ランキングの上位1000人に、直近35日にWCA Liveで行われた大会での他の選手の速報を加えて計算しています。1000位より下になる場合は「?」と表示します。 <span class="recnote" id="pbOthersNote"></span></p>
       <div class="panel scroll"><table id="pbTable"></table></div>
     </section>
@@ -546,6 +546,15 @@ async function loadComps(ids, onProgress){
 function setStatus(html, isErr){ const s = $("#status"); s.innerHTML = html; s.classList.toggle("err", !!isErr); }
 
 let loadToken = 0;
+/* ミラーの元になったWCA公式データの日付（順位がいつ時点のものかを表示する） */
+let MIRROR_DATE = null, MIRROR_DATE_P = null;
+function loadMirrorDate(){
+  if (!MIRROR_DATE_P) MIRROR_DATE_P = fetchJSON(DATA_SRC + "version.json")
+    .then(j => { MIRROR_DATE = (j.export_date || "").slice(0, 10) || null; if (STATE) { renderPB(); rhRender(); } })
+    .catch(() => { MIRROR_DATE_P = null; });
+  return MIRROR_DATE_P;
+}
+
 async function loadId(id){
   const my = ++loadToken;
   LIVE = {id:null, state:"idle", comps:[]}; updateLiveNote();
@@ -562,6 +571,7 @@ async function loadId(id){
   }
   if (my !== loadToken) return;
   loadRecords(person.id);
+  loadMirrorDate();
   const ids = Object.keys(person.results || {});
   const comps = await loadComps(ids, (d,n) => {
     if (my !== loadToken) return;
@@ -1021,6 +1031,7 @@ function renderPB(){
   }
   $("#pbTable").innerHTML = h + "</tbody>";
   $("#pbLiveNote").hidden = !livePBList().length;
+  $("#pbDataDate").textContent = MIRROR_DATE ? `・${MIRROR_DATE} 時点` : "";
 }
 
 function renderChips(){
@@ -1500,20 +1511,8 @@ async function rhGunzip(res){
 function rhMeta(){
   if (!RH.metaP) RH.metaP = fetch(RH_BASE + "meta.json", {cache:"no-cache"})
     .then(r => r.ok ? r.json() : null).catch(() => null)
-    .then(m => (RH.meta = (m && m.version === 1 && m.files) ? m : null));
+    .then(m => (RH.meta = (m && m.files) ? m : null));
   return RH.metaP;
-}
-function rhPersons(){
-  if (!RH.personsP) {
-    RH.personsP = (async () => {
-      const res = await fetch(RH_BASE + "persons.bin.gz?v=" + encodeURIComponent(RH.meta.builtAt));
-      if (!res.ok) throw new Error("HTTP " + res.status);
-      const b = await rhGunzip(res);
-      return new Uint16Array(b.buffer, b.byteOffset, b.byteLength >> 1);
-    })();
-    RH.personsP.catch(() => { RH.personsP = null; });
-  }
-  return RH.personsP;
 }
 function rhFile(eid, type){
   const k = eid + "|" + type;
@@ -1524,14 +1523,15 @@ function rhFile(eid, type){
       const res = await fetch(RH_BASE + f.file + "?v=" + encodeURIComponent(RH.meta.builtAt));
       if (!res.ok) throw new Error("HTTP " + res.status);
       const b = await rhGunzip(res);
-      if (String.fromCharCode(b[0], b[1], b[2], b[3]) !== "WRH1") throw new Error("format");
+      if (String.fromCharCode(b[0], b[1], b[2], b[3]) !== "WRH2") throw new Error("format");
       let i = 4;
       const rd = () => { let v = 0, mul = 1, x; do { x = b[i++]; v += (x & 127) * mul; mul *= 128; } while (x & 128); return v; };
       const nM = rd(), counts = new Uint32Array(nM); let n = 0;
       for (let m = 0; m < nM; m++) { counts[m] = rd(); n += counts[m]; }
-      const pers = new Uint32Array(n), vals = new Uint32Array(n);
-      for (let m = 0, j = 0; m < nM; m++) { let p = 0; for (let c = 0; c < counts[m]; c++, j++) { p += rd(); pers[j] = p; vals[j] = rd(); } }
-      return {nM, counts, pers, vals};
+      const pers = new Uint32Array(n), vals = new Uint32Array(n), ctry = new Uint16Array(n);
+      let maxP = 0;
+      for (let m = 0, j = 0; m < nM; m++) { let p = 0; for (let c = 0; c < counts[m]; c++, j++) { p += rd(); pers[j] = p; vals[j] = rd(); ctry[j] = rd(); if (p > maxP) maxP = p; } }
+      return {nM, counts, pers, vals, ctry, nP:maxP + 1};
     })();
     RH.files.set(k, p);
     p.catch(() => RH.files.delete(k));
@@ -1539,8 +1539,9 @@ function rhFile(eid, type){
   return RH.files.get(k);
 }
 
-/* 月ごとに全選手の自己ベストを更新しながら、その月末のこの選手の順位と人数を数える */
-function rhCompute(eid, type, data, countries){
+/* 月ごとに全選手の自己ベストを更新しながら、その月末のこの選手の順位と人数を数える。
+   WCA公式ランキングと同じく、大陸・国内は「その記録を出したときに代表していた国」で数える。 */
+function rhCompute(eid, type, data){
   const meta = RH.meta;
   const mine = [];
   for (const r of STATE.rounds) {
@@ -1561,7 +1562,7 @@ function rhCompute(eid, type, data, countries){
   const T = [new Int32Array(u + 1), new Int32Array(u + 1), new Int32Array(u + 1)], tot = [0, 0, 0];
   const add = (t, i, d) => { for (i++; i <= u; i += i & -i) t[i] += d; };
   const sum = (t, i) => { let s = 0; for (; i > 0; i -= i & -i) s += t[i]; return s; };
-  const cur = new Int32Array(countries.length).fill(-1);
+  const cur = [new Int32Array(data.nP).fill(-1), new Int32Array(data.nP).fill(-1), new Int32Array(data.nP).fill(-1)];
   // 未来の月は表示しない（データの期間と、見ている人の今日の月の早いほうまで）
   const now = new Date(), nowM = (now.getFullYear() - 1982) * 12 + now.getMonth();
   const first = mine[0][0], last = Math.min(data.nM - 1, nowM);
@@ -1572,13 +1573,15 @@ function rhCompute(eid, type, data, countries){
   let j = 0, k = 0, my = Infinity;
   for (let m = 0; m <= last; m++) {
     for (let c = 0; c < data.counts[m]; c++, j++) {
-      const p = data.pers[j], vi = lb(data.vals[j]), cc = countries[p], old = cur[p];
-      const inCont = cc < sameCont.length && sameCont[cc] === 1, inCtry = ci >= 0 && cc === ci;
-      if (old >= 0) add(T[0], old, -1); else tot[0]++;
-      add(T[0], vi, 1);
-      if (inCont) { if (old >= 0) add(T[1], old, -1); else tot[1]++; add(T[1], vi, 1); }
-      if (inCtry) { if (old >= 0) add(T[2], old, -1); else tot[2]++; add(T[2], vi, 1); }
-      cur[p] = vi;
+      const p = data.pers[j], vi = lb(data.vals[j]), cc = data.ctry[j];
+      const inR = [true, cc < sameCont.length && sameCont[cc] === 1, ci >= 0 && cc === ci];
+      for (let r = 0; r < 3; r++) {
+        if (!inR[r]) continue;
+        const old = cur[r][p];
+        if (old >= 0 && vi >= old) continue;          // その地域での自己ベストは更新していない
+        if (old >= 0) add(T[r], old, -1); else tot[r]++;
+        add(T[r], vi, 1); cur[r][p] = vi;
+      }
     }
     while (k < mine.length && mine[k][0] <= m) { if (mine[k][1] < my) my = mine[k][1]; k++; }
     if (m >= first) {
@@ -1595,12 +1598,12 @@ async function rhLoad(eid, type){
   if (RH.series.has(key2) || RH.loading.has(key2)) return;
   RH.loading.add(key2); RH.errors.delete(key2);
   try {
-    const [countries, data] = await Promise.all([rhPersons(), rhFile(eid, type)]);
+    const data = await rhFile(eid, type);
     await new Promise(r => setTimeout(r, 0));
     if (RH.pid !== pid || !STATE) return;
-    RH.series.set(key2, data ? rhCompute(eid, type, data, countries) : null);
+    RH.series.set(key2, data ? rhCompute(eid, type, data) : null);
   } catch(e) {
-    RH.errors.set(key2, e.message === "nodecomp" ? "nodecomp" : "load");
+    RH.errors.set(key2, e.message === "nodecomp" ? "nodecomp" : e.message === "format" ? "format" : "load");
   } finally {
     RH.loading.delete(key2);
     if (RH.pid === pid) rhRender();
@@ -1657,10 +1660,13 @@ function rhRender(){
     return `<button type="button" class="chip" data-eid="${esc(e)}" aria-pressed="${RH.sel.has(e)}" ${f ? "" : `title="${RH.type === "single" ? "単発" : "平均"}のデータがありません"`}>${esc(ev(e).name)}</button>`;
   }).join("");
   const sel = evs.filter(e => RH.sel.has(e));
-  for (const e of sel) if (meta.files[e]?.[RH.type]) rhLoad(e, RH.type);
+  // 読み込みに失敗した種目は自動で再試行しない（ページを再読み込みするとやり直す）
+  for (const e of sel) if (meta.files[e]?.[RH.type] && !RH.errors.has(e + "|" + RH.type)) rhLoad(e, RH.type);
   const loadingN = sel.filter(e => RH.loading.has(e + "|" + RH.type));
   const bytes = loadingN.reduce((a, e) => a + (meta.files[e]?.[RH.type]?.bytes || 0), 0);
-  status.textContent = `データ: WCA公式の結果エクスポート（${(meta.exportDate || meta.builtAt || "").slice(0, 10)} 時点）`
+  const rhDate = (meta.exportDate || meta.builtAt || "").slice(0, 10);
+  status.textContent = `データ: WCA公式の結果エクスポート（${rhDate} 時点）`
+    + (MIRROR_DATE && rhDate && MIRROR_DATE !== rhDate ? `。自己ベストとランキングの欄は ${MIRROR_DATE} 時点のデータのため、その間に反映された大会の分だけ最新の順位が違うことがあります` : "")
     + (loadingN.length ? `・${loadingN.map(e => ev(e).name).join("・")} を読み込み中（約${(bytes / 1048576).toFixed(1)}MB）…` : "");
   // 凡例
   const regs = rhRegs(null);
@@ -1673,7 +1679,7 @@ function rhRender(){
     const el = charts.querySelector(`.rhchart[data-eid="${CSS.escape(e)}"] .rhplot`);
     const k = e + "|" + RH.type, s = RH.series.get(k);
     if (!meta.files[e]?.[RH.type]) el.innerHTML = `<p class="note">${RH.type === "single" ? "単発" : "平均"}の記録がない種目です。</p>`;
-    else if (RH.errors.has(k)) el.innerHTML = `<p class="note err">${RH.errors.get(k) === "nodecomp" ? "このブラウザでは読み込めません。iOS 16.4 以降の Safari か、最新の Chrome・Edge・Firefox で開いてください。" : "データを読み込めませんでした。通信状況を確認して、ページを再読み込みしてください。"}</p>`;
+    else if (RH.errors.has(k)) el.innerHTML = `<p class="note err">${RH.errors.get(k) === "nodecomp" ? "このブラウザでは読み込めません。iOS 16.4 以降の Safari か、最新の Chrome・Edge・Firefox で開いてください。" : RH.errors.get(k) === "format" ? "データの形式が古いため表示できません。GitHub の Actions タブで「Build and deploy」を実行し直すと表示されます。" : "データを読み込めませんでした。通信状況を確認して、ページを再読み込みしてください。"}</p>`;
     else if (!RH.series.has(k)) el.innerHTML = `<p class="note">読み込み中…</p>`;
     else if (!s) el.innerHTML = `<p class="note">この選手の${RH.type === "single" ? "単発" : "平均"}の記録がありません。</p>`;
     else rhDraw(el, s);
