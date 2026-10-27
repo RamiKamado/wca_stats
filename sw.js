@@ -3,10 +3,11 @@
  * - 成績データは「ネット優先・失敗したらキャッシュ」で取得し、一度見た選手はオフラインでも表示できる
  * index.html を更新したら VERSION を上げると、古いキャッシュが確実に入れ替わります。
  */
-const VERSION = "v9";
+const VERSION = "v13";
 const SHELL = `wca-stats-shell-${VERSION}`;
 const DATA = "wca-stats-data";
 const FONTS = "wca-stats-fonts";
+const RANK = "wca-stats-rankhist";
 const SHELL_FILES = [
   "./",
   "./index.html",
@@ -26,7 +27,7 @@ self.addEventListener("install", event => {
 
 self.addEventListener("activate", event => {
   event.waitUntil((async () => {
-    const keep = new Set([SHELL, DATA, FONTS]);
+    const keep = new Set([SHELL, DATA, FONTS, RANK]);
     for (const k of await caches.keys()) if (!keep.has(k)) await caches.delete(k);
     await self.clients.claim();
   })());
@@ -67,6 +68,22 @@ self.addEventListener("fetch", event => {
   if (req.method !== "GET") return;
   const url = new URL(req.url);
 
+  // ランキングの推移データ（?v=作成日時 付き）：一度読み込んだら保存し、新しい版が出たら古い版を消す
+  if (url.origin === self.location.origin && url.pathname.includes("/data/rankhist/") && url.searchParams.has("v")) {
+    event.respondWith((async () => {
+      const cache = await caches.open(RANK);
+      const hit = await cache.match(req);
+      if (hit) return hit;
+      const res = await fetch(req);
+      if (res && res.ok) {
+        await cache.put(req, res.clone());
+        const v = url.searchParams.get("v");
+        for (const k of await cache.keys()) if (new URL(k.url).searchParams.get("v") !== v) await cache.delete(k);
+      }
+      return res;
+    })());
+    return;
+  }
   // アプリ本体：ネット優先（更新をすぐ反映）、オフライン時はキャッシュ
   if (url.origin === self.location.origin) {
     if (req.mode === "navigate") {

@@ -28,7 +28,7 @@
   --ink:#121620; --muted:#576074; --faint:#8b93a5; --line:#dce1e9;
   --accent:#2a78d6; --accent-ink:#1c5cab; --avg:#eb6834;
   --gold:#b48d14; --silver:#8a949f; --bronze:#a5622b; --bad:#c43c3b;
-  --rec-nr:#16855e; --rec-cr:#b86e00; --rec-wr:#c8323a; --live:#6d4fd8;
+  --rec-nr:#16855e; --rec-cr:#b86e00; --rec-wr:#c8323a; --live:#6d4fd8; --s3:#1baf7a;
   --band:#111827; --band-ink:#f2f4f8; --band-muted:#9aa4b8; --band-field:#1e2738; --band-line:#334059;
   --f-display:"Barlow Condensed","Arial Narrow","Hiragino Sans",sans-serif;
   --f-body:"IBM Plex Sans JP","Hiragino Sans","Noto Sans JP","Yu Gothic",sans-serif;
@@ -38,12 +38,12 @@
   --bg:#0f1218; --surface:#171b23; --sunk:#1f2530;
   --ink:#edf0f5; --muted:#a3abba; --faint:#76808f; --line:#2a313d;
   --accent:#3987e5; --accent-ink:#86b6ef; --avg:#d95926;
-  --gold:#d6ad35; --silver:#aab3be; --bronze:#c98450; --bad:#e66767; --rec-nr:#1f9b6e; --rec-cr:#c98500; --rec-wr:#e0484f; --live:#a493f0; --band:#0a0d13; --band-field:#161c28; --band-line:#2a3345; color-scheme:dark; } }
+  --gold:#d6ad35; --silver:#aab3be; --bronze:#c98450; --bad:#e66767; --rec-nr:#1f9b6e; --rec-cr:#c98500; --rec-wr:#e0484f; --live:#a493f0; --s3:#199e70; --band:#0a0d13; --band-field:#161c28; --band-line:#2a3345; color-scheme:dark; } }
 :root[data-theme="dark"]{
   --bg:#0f1218; --surface:#171b23; --sunk:#1f2530;
   --ink:#edf0f5; --muted:#a3abba; --faint:#76808f; --line:#2a313d;
   --accent:#3987e5; --accent-ink:#86b6ef; --avg:#d95926;
-  --gold:#d6ad35; --silver:#aab3be; --bronze:#c98450; --bad:#e66767; --rec-nr:#1f9b6e; --rec-cr:#c98500; --rec-wr:#e0484f; --live:#a493f0; --band:#0a0d13; --band-field:#161c28; --band-line:#2a3345; color-scheme:dark; }
+  --gold:#d6ad35; --silver:#aab3be; --bronze:#c98450; --bad:#e66767; --rec-nr:#1f9b6e; --rec-cr:#c98500; --rec-wr:#e0484f; --live:#a493f0; --s3:#199e70; --band:#0a0d13; --band-field:#161c28; --band-line:#2a3345; color-scheme:dark; }
 
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
@@ -197,14 +197,17 @@ dl.stats dd{margin:0;text-align:right;font-family:var(--f-mono);font-variant-num
 .logtools input{flex:1 1 220px}
 details.comp{border-bottom:1px solid var(--line)}
 details.comp:last-of-type{border-bottom:0}
-details.comp summary{list-style:none;cursor:pointer;display:grid;grid-template-columns:6.6em minmax(0,1fr) auto;gap:6px 14px;padding:11px 16px;align-items:baseline}
+details.comp summary{list-style:none;cursor:pointer;display:grid;grid-template-columns:6.6em minmax(12em,1fr) minmax(0,max-content);gap:6px 14px;padding:11px 16px;align-items:baseline}
 details.comp summary::-webkit-details-marker{display:none}
 details.comp summary:hover{background:var(--sunk)}
 details.comp[open] summary{background:var(--sunk)}
 .cdate{font-family:var(--f-mono);font-size:13px;color:var(--muted)}
 .cname{font-weight:500;min-width:0}
 .cname small{display:block;font-weight:400;color:var(--faint);font-size:12.5px}
-.cright{display:flex;gap:10px;align-items:center;font-size:12.5px;color:var(--muted);flex-wrap:wrap;justify-content:flex-end}
+.cright{display:flex;gap:4px 10px;align-items:center;font-size:12.5px;color:var(--muted);flex-wrap:wrap;justify-content:flex-end;min-width:0}
+/* メダルが多い大会でも行の幅に収まるよう折り返す */
+.cright .pods{flex-wrap:wrap;justify-content:flex-end;gap:2px 8px;min-width:0}
+.cright .pods > span{white-space:nowrap}
 .tag{font-size:11px;font-weight:700;letter-spacing:.04em;padding:1px 6px;border-radius:4px;background:var(--accent);color:#fff;font-family:var(--f-mono)}
 .tag.champ{background:transparent;color:var(--accent-ink);border:1px solid var(--accent)}
 .comp .inner{padding:4px 16px 14px;overflow-x:auto}
@@ -212,7 +215,7 @@ details.comp[open] summary{background:var(--sunk)}
 .solves{font-family:var(--f-mono);font-size:12.5px;color:var(--muted);text-align:left!important}
 .solves .tr{color:var(--faint)}
 .more{display:flex;justify-content:center;padding:12px}
-@media (max-width:560px){details.comp summary{grid-template-columns:minmax(0,1fr) auto}.cdate{grid-column:1/-1}}
+@media (max-width:560px){details.comp summary{grid-template-columns:minmax(0,1fr)}.cright,.cright .pods{justify-content:flex-start}}
 
 /* record badges */
 .rec{display:inline-block;font:700 10.5px/1 var(--f-mono);letter-spacing:.03em;padding:3px 5px;border-radius:4px;color:#fff;vertical-align:1px;margin-left:5px}
@@ -223,6 +226,7 @@ details.comp[open] summary{background:var(--sunk)}
 .rkold{color:var(--faint)}
 .rkarrow{color:var(--faint);margin:0 2px}
 .rknew{color:var(--live);font-weight:700}
+.pdot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:1px}
 .prov{font-size:11.5px;color:var(--live);margin-left:4px;white-space:nowrap}
 .livenote{font-size:13px;color:var(--muted);margin-top:4px;display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
 .livenote:empty{display:none}
@@ -230,6 +234,18 @@ details.comp[open] summary{background:var(--sunk)}
 .livenote b{color:var(--live);font-weight:600}
 .ast{display:inline-block;width:1em;text-align:right;color:var(--faint)}
 .ycap{caption-side:bottom;text-align:left;font-size:12px;color:var(--faint);padding:8px 12px 12px;white-space:normal;border-top:1px solid var(--line)}
+/* ランキングの推移 */
+.rhctl{display:flex;flex-wrap:wrap;gap:8px 12px;margin-bottom:10px}
+.rhev{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:8px}
+.rhev .chips{margin:0;display:contents}
+.rhev .btn.ghost{font-size:13px;padding:5px 12px;border-radius:999px}
+.rhlegend{display:flex;flex-wrap:wrap;gap:14px;font-size:12.5px;color:var(--muted);margin:6px 0 2px}
+.rhlegend i{display:inline-block;width:16px;height:2px;vertical-align:middle;margin-right:6px}
+.rhcharts{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,440px),1fr));gap:16px;margin-top:10px}
+.rhtable{margin-top:16px;max-height:480px;overflow:auto}
+#rhTable td,#rhTable th{padding:6px 10px;font-size:13px}
+#rhStatus{display:block;margin-bottom:6px}
+.note.err{color:var(--bad)}
 .homehint{font-size:12.5px;color:var(--faint);flex-basis:100%}
 .recnote.err{color:var(--bad)}
 
@@ -305,6 +321,24 @@ footer{margin-top:48px;padding-top:16px;border-top:1px solid var(--line);color:v
       <div class="panel scroll"><table id="pbTable"></table></div>
     </section>
 
+    <section id="secRankHist">
+      <h2>ランキングの推移</h2>
+      <p class="lede">各月末の時点で、その時の自己ベストが世界・大陸・国内の何位だったか（「割合」はその時点で記録を持つ選手の中で上位何%か）。WCA公式の結果エクスポートから計算しています。</p>
+      <span class="recnote" id="rhStatus"></span>
+      <div id="rhBody">
+        <div class="rhctl">
+          <div class="seg" id="rhType" role="group" aria-label="単発・平均"><button type="button" data-v="single">単発</button><button type="button" data-v="average">平均</button></div>
+          <div class="seg" id="rhRegion" role="group" aria-label="地域"><button type="button" data-v="world" title="世界ランキング">WR 世界</button><button type="button" data-v="continent" title="大陸ランキング">CR 大陸</button><button type="button" data-v="country" title="国内ランキング">NR 国内</button><button type="button" data-v="all">すべて</button></div>
+          <div class="seg" id="rhMetric" role="group" aria-label="表示する値"><button type="button" data-v="rank">順位</button><button type="button" data-v="pct">割合</button></div>
+          <div class="seg" id="rhStep" role="group" aria-label="表示間隔"><button type="button" data-v="12">1年</button><button type="button" data-v="6">半年</button><button type="button" data-v="3">3ヶ月</button><button type="button" data-v="1">1ヶ月</button></div>
+        </div>
+        <div class="rhev"><div class="chips" id="rhEvents" role="group" aria-label="表示する種目"></div><button type="button" class="btn ghost" id="rhAll">すべて選択</button><button type="button" class="btn ghost" id="rhNone">すべて解除</button></div>
+        <div class="rhlegend" id="rhLegend"></div>
+        <div class="rhcharts" id="rhCharts"></div>
+        <div class="panel rhtable"><table id="rhTable"></table></div>
+      </div>
+    </section>
+
     <section id="secEvent">
       <h2 id="evTitle">種目の詳細</h2>
       <div class="chips" id="evChips" role="group" aria-label="種目"></div>
@@ -368,6 +402,7 @@ footer{margin-top:48px;padding-top:16px;border-top:1px solid var(--line);color:v
           <option value="rec">NR・CR・WRのみ</option>
           <option value="pb">PB更新のみ</option>
           <option value="final">決勝のみ</option>
+          <option value="podium">入賞時の記録</option>
         </select>
       </div>
       <div id="histList"></div>
@@ -380,6 +415,10 @@ footer{margin-top:48px;padding-top:16px;border-top:1px solid var(--line);color:v
         <input id="logFilter" placeholder="大会名・都市で絞り込み" aria-label="大会名・都市で絞り込み">
         <select id="logEvent" aria-label="種目で絞り込み"></select>
         <select id="logYear" aria-label="年で絞り込み"></select>
+        <select id="logPodium" aria-label="成績で絞り込み">
+          <option value="">すべての大会</option>
+          <option value="podium">入賞した大会</option>
+        </select>
       </div>
       <div class="panel" id="compLog"></div>
       <div class="more"><button type="button" class="btn ghost" id="moreBtn" hidden>さらに表示</button></div>
@@ -775,7 +814,8 @@ function render(person, comps){
   $("#appTitle").setAttribute("content", local || person.name);
   applyRecs();
   initRankPeriod(!!prevEid);
-  renderProfile(); renderTiles(); renderPB(); renderChips(); renderEvent(); renderActivity(); initHistFilters(); renderHistory(); initLogFilters(); renderLog(); updateRecNote();
+  renderProfile(); renderTiles(); renderPB(); renderChips(); renderEvent(); renderActivity(); initHistFilters(); renderHistory(); initLogFilters(!!prevEid); renderLog(); updateRecNote();
+  rhInit();
 }
 
 function renderProfile(){
@@ -1352,7 +1392,7 @@ function renderHistory(){
   if (!STATE) return;
   const {E, evIds, pbRound} = STATE;
   const fe = $("#histEvent").value, mode = $("#histShow").value;
-  const keep = r => mode === "all" || (mode === "rec" && (r.recS || r.recA)) || (mode === "pb" && pbRound.has(r)) || (mode === "final" && r.round === "Final");
+  const keep = r => mode === "all" || (mode === "rec" && (r.recS || r.recA)) || (mode === "pb" && pbRound.has(r)) || (mode === "final" && r.round === "Final") || (mode === "podium" && isPodium(r));
   let total = 0, html = "";
   for (const id of (fe ? [fe] : evIds)) {
     const e = E[id]; if (!e) continue;
@@ -1366,7 +1406,7 @@ function renderHistory(){
       const first = r.cid !== prevC; prevC = r.cid;
       rows += `<tr class="${first ? "newcomp" : ""} ${r.recS || r.recA ? "hasrec" : ""}">
         <td class="l comp" title="${esc(compLabel(r))}">${first ? `${esc(compLabel(r))}${liveTagHTML(r.m)}<small>${esc(r.date)}</small>` : ""}</td>
-        <td class="l">${esc(RJ[r.round] || r.round)}${provHTML(r)}</td><td class="num">${r.position ?? ""}</td>
+        <td class="l">${esc(RJ[r.round] || r.round)}${provHTML(r)}</td><td class="num">${isPodium(r) ? `<i class="pdot d-${["gold","silver","bronze"][r.position-1]}" title="${r.position}位入賞" aria-hidden="true"></i>` : ""}${r.position ?? ""}</td>
         <td class="val"><b>${esc(fmtVal(id, r.best, false))}</b>${badge(r.recS)}${t.includes("S") ? ' <span class="tag pb">PB</span>' : ""}</td>
         <td class="val"><b>${esc(fmtVal(id, r.average, true))}</b>${badge(r.recA)}${t.includes("A") ? ' <span class="tag pb">PB</span>' : ""}</td>
         <td class="solves">${solvesHTML(r)}</td></tr>`;
@@ -1379,13 +1419,20 @@ function renderHistory(){
 }
 
 /* ---------- competition log ---------- */
-function initLogFilters(){
+function initLogFilters(keep){
   const {evIds, compList} = STATE;
-  $("#logFilter").value = "";
+  const prevE = $("#logEvent").value, prevY = $("#logYear").value;
+  if (!keep) { $("#logFilter").value = ""; $("#logPodium").value = ""; }
   $("#logEvent").innerHTML = `<option value="">すべての種目</option>` + evIds.map(id => `<option value="${esc(id)}">${esc(ev(id).name)}</option>`).join("");
   const ys = [...new Set(compList.map(c => c.date.slice(0,4)))].sort().reverse();
   $("#logYear").innerHTML = `<option value="">すべての年</option>` + ys.map(y => `<option value="${y}">${y}年</option>`).join("");
+  if (keep) {
+    if (evIds.includes(prevE)) $("#logEvent").value = prevE;
+    if (ys.includes(prevY)) $("#logYear").value = prevY;
+  }
 }
+// 入賞：終了した決勝で1〜3位（記録あり）
+const isPodium = r => r.round === "Final" && r.finished && r.best > 0 && r.position >= 1 && r.position <= 3;
 function solvesHTML(r){
   const id = r.eid; const s = r.solves.filter(v => v !== 0);
   let trim = new Set();
@@ -1398,14 +1445,15 @@ function solvesHTML(r){
 }
 function renderLog(){
   const {compList, pbRound, person} = STATE;
-  const q = $("#logFilter").value.trim().toLowerCase(), fe = $("#logEvent").value, fy = $("#logYear").value;
+  const q = $("#logFilter").value.trim().toLowerCase(), fe = $("#logEvent").value, fy = $("#logYear").value, fp = $("#logPodium").value;
   const champ = new Set(person.championshipIds || []);
-  const list = compList.filter(c => (!q || (c.name + " " + c.city + " " + c.cid).toLowerCase().includes(q)) && (!fe || c.rounds.some(r => r.eid === fe)) && (!fy || c.date.startsWith(fy)));
+  const list = compList.filter(c => (!q || (c.name + " " + c.city + " " + c.cid).toLowerCase().includes(q)) && (!fe || c.rounds.some(r => r.eid === fe)) && (!fy || c.date.startsWith(fy))
+    && (!fp || c.rounds.some(r => isPodium(r) && (!fe || r.eid === fe))));
   $("#logCount").textContent = `${list.length} / ${compList.length} 大会`;
   const shown = list.slice(0, STATE.logShown);
   $("#compLog").innerHTML = shown.length ? shown.map(c => {
     const rs = c.rounds.filter(r => !fe || r.eid === fe).sort((a,b) => ev(a.eid).order - ev(b.eid).order || b.ro - a.ro);
-    const pods = c.rounds.filter(r => r.round === "Final" && r.finished && r.best > 0 && r.position <= 3);
+    const pods = c.rounds.filter(isPodium);
     const pbs = c.rounds.filter(r => pbRound.has(r)).length;
     const evCount = new Set(c.rounds.map(r => r.eid)).size;
     const cls = ["gold","silver","bronze"];
@@ -1424,12 +1472,310 @@ function renderLog(){
   $("#moreBtn").textContent = `さらに表示（残り ${list.length - STATE.logShown}）`;
 }
 
+/* ---------- ランキングの推移（WCA公式の結果エクスポートから GitHub Actions で作ったデータ） ---------- */
+const RH_BASE = "data/rankhist/";
+const RH_REG = [
+  {k:"world", code:"WR", name:"世界", color:"var(--accent)"},
+  {k:"continent", code:"CR", name:"大陸", color:"var(--avg)"},
+  {k:"country", code:"NR", name:"国内", color:"var(--s3)"}
+];
+const RH_STEPS = {12:"1年", 6:"半年", 3:"3ヶ月", 1:"1ヶ月"};
+const RH = {meta:undefined, metaP:null, personsP:null, files:new Map(), series:new Map(), loading:new Set(), errors:new Map(),
+  pid:null, sel:new Set(), type:"single", region:"all", metric:"rank", step:3};
+try {
+  const o = JSON.parse(localStorage.getItem("wca-rh") || "{}");
+  if (["single","average"].includes(o.type)) RH.type = o.type;
+  if (["all","world","continent","country"].includes(o.region)) RH.region = o.region;
+  if (["rank","pct"].includes(o.metric)) RH.metric = o.metric;
+  if ([1,3,6,12].includes(o.step)) RH.step = o.step;
+} catch(e){}
+function rhSave(){ try { localStorage.setItem("wca-rh", JSON.stringify({type:RH.type, region:RH.region, metric:RH.metric, step:RH.step})); } catch(e){} }
+const ymIdx = d => (+d.slice(0,4) - 1982) * 12 + (+d.slice(5,7) - 1);
+const ymLabel = m => `${1982 + Math.floor(m / 12)}/${String(m % 12 + 1).padStart(2, "0")}`;
+
+async function rhGunzip(res){
+  if (typeof DecompressionStream === "undefined") throw new Error("nodecomp");
+  return new Uint8Array(await new Response(res.body.pipeThrough(new DecompressionStream("gzip"))).arrayBuffer());
+}
+function rhMeta(){
+  if (!RH.metaP) RH.metaP = fetch(RH_BASE + "meta.json", {cache:"no-cache"})
+    .then(r => r.ok ? r.json() : null).catch(() => null)
+    .then(m => (RH.meta = (m && m.version === 1 && m.files) ? m : null));
+  return RH.metaP;
+}
+function rhPersons(){
+  if (!RH.personsP) {
+    RH.personsP = (async () => {
+      const res = await fetch(RH_BASE + "persons.bin.gz?v=" + encodeURIComponent(RH.meta.builtAt));
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const b = await rhGunzip(res);
+      return new Uint16Array(b.buffer, b.byteOffset, b.byteLength >> 1);
+    })();
+    RH.personsP.catch(() => { RH.personsP = null; });
+  }
+  return RH.personsP;
+}
+function rhFile(eid, type){
+  const k = eid + "|" + type;
+  if (!RH.files.has(k)) {
+    const f = RH.meta.files?.[eid]?.[type];
+    const p = (async () => {
+      if (!f) return null;
+      const res = await fetch(RH_BASE + f.file + "?v=" + encodeURIComponent(RH.meta.builtAt));
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const b = await rhGunzip(res);
+      if (String.fromCharCode(b[0], b[1], b[2], b[3]) !== "WRH1") throw new Error("format");
+      let i = 4;
+      const rd = () => { let v = 0, mul = 1, x; do { x = b[i++]; v += (x & 127) * mul; mul *= 128; } while (x & 128); return v; };
+      const nM = rd(), counts = new Uint32Array(nM); let n = 0;
+      for (let m = 0; m < nM; m++) { counts[m] = rd(); n += counts[m]; }
+      const pers = new Uint32Array(n), vals = new Uint32Array(n);
+      for (let m = 0, j = 0; m < nM; m++) { let p = 0; for (let c = 0; c < counts[m]; c++, j++) { p += rd(); pers[j] = p; vals[j] = rd(); } }
+      return {nM, counts, pers, vals};
+    })();
+    RH.files.set(k, p);
+    p.catch(() => RH.files.delete(k));
+  }
+  return RH.files.get(k);
+}
+
+/* 月ごとに全選手の自己ベストを更新しながら、その月末のこの選手の順位と人数を数える */
+function rhCompute(eid, type, data, countries){
+  const meta = RH.meta;
+  const mine = [];
+  for (const r of STATE.rounds) {
+    if (r.live || r.eid !== eid) continue;
+    const v = type === "single" ? r.best : r.average;
+    if (v > 0) mine.push([ymIdx(r.date), v]);
+  }
+  if (!mine.length) return null;
+  mine.sort((a, b) => a[0] - b[0]);
+  const ci = meta.countries.findIndex(c => c.iso2 === STATE.person.country);
+  const myCont = ci >= 0 ? meta.countries[ci].cont : null;
+  const sameCont = new Uint8Array(meta.countries.length + 1);
+  meta.countries.forEach((c, i) => { sameCont[i] = myCont && c.cont === myCont ? 1 : 0; });
+  // 記録の値を小さい順の番号に置き換える（同じ値は同じ番号）
+  const U = Uint32Array.from(data.vals).sort(); let u = 0;
+  for (let i = 0; i < U.length; i++) if (i === 0 || U[i] !== U[i - 1]) U[u++] = U[i];
+  const lb = v => { let lo = 0, hi = u; while (lo < hi) { const mid = (lo + hi) >> 1; if (U[mid] < v) lo = mid + 1; else hi = mid; } return lo; };
+  const T = [new Int32Array(u + 1), new Int32Array(u + 1), new Int32Array(u + 1)], tot = [0, 0, 0];
+  const add = (t, i, d) => { for (i++; i <= u; i += i & -i) t[i] += d; };
+  const sum = (t, i) => { let s = 0; for (; i > 0; i -= i & -i) s += t[i]; return s; };
+  const cur = new Int32Array(countries.length).fill(-1);
+  const first = mine[0][0], last = data.nM - 1;
+  if (first > last) return null;
+  const n = last - first + 1;
+  const out = {first, last, rank:[new Int32Array(n), new Int32Array(n), new Int32Array(n)], total:[new Int32Array(n), new Int32Array(n), new Int32Array(n)], pb:new Float64Array(n),
+    has:[true, !!myCont, ci >= 0]};
+  let j = 0, k = 0, my = Infinity;
+  for (let m = 0; m <= last; m++) {
+    for (let c = 0; c < data.counts[m]; c++, j++) {
+      const p = data.pers[j], vi = lb(data.vals[j]), cc = countries[p], old = cur[p];
+      const inCont = cc < sameCont.length && sameCont[cc] === 1, inCtry = ci >= 0 && cc === ci;
+      if (old >= 0) add(T[0], old, -1); else tot[0]++;
+      add(T[0], vi, 1);
+      if (inCont) { if (old >= 0) add(T[1], old, -1); else tot[1]++; add(T[1], vi, 1); }
+      if (inCtry) { if (old >= 0) add(T[2], old, -1); else tot[2]++; add(T[2], vi, 1); }
+      cur[p] = vi;
+    }
+    while (k < mine.length && mine[k][0] <= m) { if (mine[k][1] < my) my = mine[k][1]; k++; }
+    if (m >= first) {
+      const q = lb(my), i = m - first;
+      for (let r = 0; r < 3; r++) { out.rank[r][i] = sum(T[r], q) + 1; out.total[r][i] = tot[r]; }
+      out.pb[i] = my;
+    }
+  }
+  return out;
+}
+
+async function rhLoad(eid, type){
+  const key2 = eid + "|" + type, pid = RH.pid;
+  if (RH.series.has(key2) || RH.loading.has(key2)) return;
+  RH.loading.add(key2); RH.errors.delete(key2);
+  try {
+    const [countries, data] = await Promise.all([rhPersons(), rhFile(eid, type)]);
+    await new Promise(r => setTimeout(r, 0));
+    if (RH.pid !== pid || !STATE) return;
+    RH.series.set(key2, data ? rhCompute(eid, type, data, countries) : null);
+  } catch(e) {
+    RH.errors.set(key2, e.message === "nodecomp" ? "nodecomp" : "load");
+  } finally {
+    RH.loading.delete(key2);
+    if (RH.pid === pid) rhRender();
+  }
+}
+
+async function rhInit(){
+  const st = STATE;
+  if (RH.pid !== st.person.id) { RH.pid = st.person.id; RH.sel = new Set(); RH.series.clear(); RH.errors.clear(); }
+  const meta = await rhMeta();
+  if (STATE !== st) return;
+  if (meta && !RH.sel.size) {
+    const evs = rhEvents();
+    const top = evs.slice().sort((a, b) => st.E[b].rounds.length - st.E[a].rounds.length)[0];
+    if (top) RH.sel.add(top);
+  }
+  rhRender();
+}
+function rhEvents(){ return STATE.evIds.filter(e => RH.meta?.files?.[e] && STATE.E[e].rounds.some(r => !r.live)); }
+function rhSampleIdx(s){
+  const idx = [];
+  for (let m = s.first; m <= s.last; m++) if ((m % 12 + 1) % RH.step === 0) idx.push(m - s.first);
+  if (!idx.length || idx.at(-1) !== s.last - s.first) idx.push(s.last - s.first);
+  return idx;
+}
+function rhRegs(s){ return RH_REG.map((g, r) => ({...g, r})).filter(g => (RH.region === "all" || RH.region === g.k) && (!s || s.has[g.r])); }
+const rhVal = (s, r, i) => RH.metric === "pct" ? s.rank[r][i] / s.total[r][i] * 100 : s.rank[r][i];
+const rhFmtPct = p => (p < 1 ? p.toFixed(2) : p < 10 ? p.toFixed(1) : p.toFixed(0)) + "%";
+const rhFmt = (s, r, i) => RH.metric === "pct" ? rhFmtPct(rhVal(s, r, i)) : fmtNum(s.rank[r][i]);
+function rhContName(){
+  const c = RH.meta?.countries?.find(x => x.iso2 === STATE.person.country);
+  return c && RH.meta.continents?.[c.cont] ? RH.meta.continents[c.cont].record || "CR" : "CR";
+}
+
+function rhRender(){
+  if (!STATE) return;
+  const meta = RH.meta;
+  const segSet = (id, val) => document.querySelectorAll(`#${id} button`).forEach(b => b.setAttribute("aria-pressed", b.dataset.v === String(val)));
+  segSet("rhType", RH.type); segSet("rhRegion", RH.region); segSet("rhMetric", RH.metric); segSet("rhStep", RH.step);
+  const crBtn = document.querySelector('#rhRegion button[data-v="continent"]');
+  if (crBtn) crBtn.textContent = `${rhContName()} 大陸`;
+  const status = $("#rhStatus");
+  if (meta === undefined) { status.textContent = "データを確認中…"; return; }
+  if (!meta) {
+    $("#rhBody").hidden = true;
+    status.classList.add("err");
+    status.textContent = "ランキングの推移のデータがありません。GitHub で公開したページでは、GitHub Actions がWCA公式の結果エクスポートからデータを作ると表示されます（README の手順を参照）。";
+    return;
+  }
+  $("#rhBody").hidden = false; status.classList.remove("err");
+  const evs = rhEvents();
+  $("#rhEvents").innerHTML = evs.map(e => {
+    const f = meta.files[e]?.[RH.type];
+    return `<button type="button" class="chip" data-eid="${esc(e)}" aria-pressed="${RH.sel.has(e)}" ${f ? "" : `title="${RH.type === "single" ? "単発" : "平均"}のデータがありません"`}>${esc(ev(e).name)}</button>`;
+  }).join("");
+  const sel = evs.filter(e => RH.sel.has(e));
+  for (const e of sel) if (meta.files[e]?.[RH.type]) rhLoad(e, RH.type);
+  const loadingN = sel.filter(e => RH.loading.has(e + "|" + RH.type));
+  const bytes = loadingN.reduce((a, e) => a + (meta.files[e]?.[RH.type]?.bytes || 0), 0);
+  status.textContent = `データ: WCA公式の結果エクスポート（${(meta.exportDate || meta.builtAt || "").slice(0, 10)} 時点）`
+    + (loadingN.length ? `・${loadingN.map(e => ev(e).name).join("・")} を読み込み中（約${(bytes / 1048576).toFixed(1)}MB）…` : "");
+  // 凡例
+  const regs = rhRegs(null);
+  $("#rhLegend").innerHTML = regs.map(g => `<span><i style="background:${g.color}"></i>${g.code === "CR" ? esc(rhContName()) : g.code}（${g.name}）</span>`).join("");
+  // グラフ
+  const charts = $("#rhCharts");
+  if (!sel.length) { charts.innerHTML = `<p class="note">上のボタンで種目を選んでください。</p>`; $("#rhTable").innerHTML = ""; return; }
+  charts.innerHTML = sel.map(e => `<div class="panel chart rhchart" data-eid="${esc(e)}"><h3>${esc(ev(e).name)}</h3><div class="rhplot"></div></div>`).join("");
+  for (const e of sel) {
+    const el = charts.querySelector(`.rhchart[data-eid="${CSS.escape(e)}"] .rhplot`);
+    const k = e + "|" + RH.type, s = RH.series.get(k);
+    if (!meta.files[e]?.[RH.type]) el.innerHTML = `<p class="note">${RH.type === "single" ? "単発" : "平均"}の記録がない種目です。</p>`;
+    else if (RH.errors.has(k)) el.innerHTML = `<p class="note err">${RH.errors.get(k) === "nodecomp" ? "このブラウザでは読み込めません。iOS 16.4 以降の Safari か、最新の Chrome・Edge・Firefox で開いてください。" : "データを読み込めませんでした。通信状況を確認して、ページを再読み込みしてください。"}</p>`;
+    else if (!RH.series.has(k)) el.innerHTML = `<p class="note">読み込み中…</p>`;
+    else if (!s) el.innerHTML = `<p class="note">この選手の${RH.type === "single" ? "単発" : "平均"}の記録がありません。</p>`;
+    else rhDraw(el, s);
+  }
+  rhTable(sel);
+}
+
+function rhLogTicks(lo, hi, pct){
+  const out = [];
+  for (let e = Math.floor(Math.log10(lo)) - 1; e <= Math.ceil(Math.log10(hi)) + 1; e++)
+    for (const f of [1, 2, 5]) { const v = f * 10 ** e; if (v >= lo && v <= hi && (pct || v >= 1)) out.push(+v.toPrecision(3)); }
+  if (out.length <= 9) return out;
+  const pow = out.filter(v => /^1(0*)$|^0\.0*1$/.test(String(v)));          // 1・10・100…
+  const mid = out.filter(v => /^(1|5)(0*)$|^0\.0*(1|5)$/.test(String(v)));  // 1・5・10・50…
+  return mid.length <= 9 ? mid : pow;
+}
+function rhDraw(el, s){
+  const idx = rhSampleIdx(s), regs = rhRegs(s);
+  if (!regs.length) { el.innerHTML = `<p class="note">この地域の順位は計算できません。</p>`; return; }
+  const pct = RH.metric === "pct";
+  const W = Math.max(280, el.clientWidth), H = W < 520 ? 220 : 250, M = {l:pct ? 50 : 52, r:72, t:10, b:24};
+  let lo = Infinity, hi = 0;
+  for (const g of regs) for (const i of idx) { const v = rhVal(s, g.r, i); if (v > 0) { lo = Math.min(lo, v); hi = Math.max(hi, v); } }
+  if (!(hi > 0)) { el.innerHTML = `<p class="note">表示できる値がありません。</p>`; return; }
+  lo = pct ? lo / 1.25 : Math.max(1, lo / 1.25); hi = hi * 1.25; if (hi / lo < 4) { lo = pct ? lo / 2 : Math.max(1, lo / 2); hi *= 2; }
+  // 軸の上下を 1・2・5 の区切りにそろえる
+  const nice = (v, up) => { const e = Math.floor(Math.log10(v)), c = [1, 2, 5, 10].map(f => f * 10 ** e); return up ? c.find(x => x >= v * 0.9999) : c.reverse().find(x => x <= v * 1.0001); };
+  lo = nice(lo, false); hi = nice(hi, true); if (!pct) lo = Math.max(1, lo);
+  const L = v => Math.log10(v);
+  const Y = v => M.t + (L(v) - L(lo)) / (L(hi) - L(lo)) * (H - M.t - M.b);          // 小さい（良い）ほど上
+  const x0 = s.first + idx[0], x1 = s.first + idx.at(-1);
+  const X = m => x1 === x0 ? (M.l + W - M.r) / 2 : M.l + (m - x0) / (x1 - x0) * (W - M.l - M.r);
+  const ticks = rhLogTicks(lo, hi, pct);
+  const yr0 = Math.floor(x0 / 12), yr1 = Math.floor(x1 / 12), every = Math.max(1, Math.ceil((yr1 - yr0 + 1) / Math.max(2, Math.floor((W - M.l - M.r) / 52))));
+  let svg = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="ランキングの推移">`;
+  svg += `<g class="grid">${ticks.map(v => `<line x1="${M.l}" x2="${W - M.r}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}"/>`).join("")}</g><g class="axis">`;
+  svg += ticks.map(v => `<text x="${M.l - 6}" y="${(Y(v) + 4).toFixed(1)}" text-anchor="end">${pct ? (v < 1 ? v : fmtNum(v)) + "%" : fmtNum(v)}</text>`).join("");
+  for (let y = yr0 + 1; y <= yr1; y++) if ((y - yr0) % every === 0 || yr1 - yr0 < 2) svg += `<text x="${X(y * 12).toFixed(1)}" y="${H - 6}" text-anchor="middle">${1982 + y}</text>`;
+  if (yr1 - yr0 < 1) svg += `<text x="${X(x0).toFixed(1)}" y="${H - 6}" text-anchor="start">${ymLabel(x0)}</text>`;
+  svg += `</g>`;
+  const labels = [];
+  for (const g of regs) {
+    const pts = idx.map(i => [X(s.first + i), Y(rhVal(s, g.r, i))]);
+    svg += `<path d="${pts.map((p, n) => (n ? "L" : "M") + p[0].toFixed(1) + "," + p[1].toFixed(1)).join("")}" fill="none" stroke="${g.color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+    if (idx.length <= 40) svg += pts.map(p => `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="3" fill="${g.color}" stroke="var(--surface)" stroke-width="1.5"/>`).join("");
+    else svg += `<circle cx="${pts.at(-1)[0].toFixed(1)}" cy="${pts.at(-1)[1].toFixed(1)}" r="4" fill="${g.color}" stroke="var(--surface)" stroke-width="2"/>`;
+    labels.push({y:pts.at(-1)[1], t:rhFmt(s, g.r, idx.at(-1)), c:g.color});
+  }
+  labels.sort((a, b) => a.y - b.y);
+  for (let i = 1; i < labels.length; i++) if (labels[i].y - labels[i - 1].y < 14) labels[i].y = labels[i - 1].y + 14;
+  svg += labels.map(l => `<text x="${(W - M.r + 8).toFixed(1)}" y="${(l.y + 4).toFixed(1)}" style="fill:var(--ink);font:600 11.5px var(--f-mono)">${esc(l.t)}</text>`).join("");
+  svg += `<line class="rhcross" x1="0" x2="0" y1="${M.t}" y2="${H - M.b}" stroke="var(--faint)" stroke-width="1" visibility="hidden"/>`;
+  svg += `<rect x="${M.l}" y="0" width="${W - M.l - M.r}" height="${H - M.b}" fill="transparent" class="rhhit"/></svg>`;
+  el.innerHTML = svg;
+  const wrap = el.parentElement, cross = el.querySelector(".rhcross"), hit = el.querySelector(".rhhit");
+  hit.addEventListener("pointermove", e2 => {
+    const box = el.querySelector("svg").getBoundingClientRect(), sx = W / box.width, mx = (e2.clientX - box.left) * sx;
+    let bi = idx[0], bd = Infinity;
+    for (const i of idx) { const d = Math.abs(X(s.first + i) - mx); if (d < bd) { bd = d; bi = i; } }
+    const cx = X(s.first + bi); cross.setAttribute("x1", cx); cross.setAttribute("x2", cx); cross.setAttribute("visibility", "visible");
+    const wr = wrap.getBoundingClientRect();
+    tipAt(wrap, `<div class="t">${ymLabel(s.first + bi)} 末・自己ベスト ${esc(fmtVal(wrap.dataset.eid, s.pb[bi], RH.type === "average"))}</div>`
+      + regs.map(g => `<div>${g.code === "CR" ? esc(rhContName()) : g.code} <b>${fmtNum(s.rank[g.r][bi])}位</b> / ${fmtNum(s.total[g.r][bi])}人（上位 ${rhFmtPct(s.rank[g.r][bi] / s.total[g.r][bi] * 100)}）</div>`).join(""),
+      e2.clientX - wr.left, e2.clientY - wr.top);
+  });
+  hit.addEventListener("pointerleave", () => { cross.setAttribute("visibility", "hidden"); hideTip(wrap); });
+}
+
+function rhTable(sel){
+  const cols = [];
+  for (const e of sel) {
+    const s = RH.series.get(e + "|" + RH.type);
+    if (s) for (const g of rhRegs(s)) cols.push({e, s, g});
+  }
+  if (!cols.length) { $("#rhTable").innerHTML = ""; return; }
+  const months = new Set();
+  for (const c of cols) for (const i of rhSampleIdx(c.s)) months.add(c.s.first + i);
+  const rows = [...months].sort((a, b) => b - a);
+  const groups = [];
+  for (const c of cols) { const last = groups.at(-1); if (last && last.e === c.e) last.n++; else groups.push({e:c.e, n:1}); }
+  let h = `<thead><tr><th class="l" rowspan="2">時点</th>${groups.map(g => `<th class="grp" colspan="${g.n}">${esc(ev(g.e).name)}</th>`).join("")}</tr>`
+    + `<tr>${cols.map((c, n) => `<th class="${n === 0 || cols[n - 1].e !== c.e ? "bl" : ""}">${c.g.code === "CR" ? esc(rhContName()) : c.g.code}</th>`).join("")}</tr></thead><tbody>`;
+  const lastM = Math.max(...cols.map(c => c.s.last));
+  for (const m of rows) {
+    h += `<tr><td class="l num">${ymLabel(m)}${m === lastM ? ' <span class="zero">最新</span>' : ""}</td>` + cols.map((c, n) => {
+      const i = m - c.s.first, cls = `num${n === 0 || cols[n - 1].e !== c.e ? " bl" : ""}`;
+      if (i < 0 || i > c.s.last - c.s.first) return `<td class="${cls}"><span class="zero">–</span></td>`;
+      return `<td class="${cls}" title="${fmtNum(c.s.rank[c.g.r][i])}位 / ${fmtNum(c.s.total[c.g.r][i])}人">${rhFmt(c.s, c.g.r, i)}</td>`;
+    }).join("") + `</tr>`;
+  }
+  $("#rhTable").innerHTML = h + "</tbody>";
+}
+
 /* ---------- events ---------- */
 $("#searchForm").addEventListener("submit", e => { e.preventDefault(); onSearch($("#q").value); });
 $("#cands").addEventListener("click", e => { const b = e.target.closest("button[data-id]"); if (b) { $("#q").value = b.dataset.id; loadId(b.dataset.id); } });
 $("#pbTable").addEventListener("click", e => { const tr = e.target.closest("tr[data-eid]"); if (tr) selectEvent(tr.dataset.eid, true); });
 $("#pbTable").addEventListener("keydown", e => { if (e.key !== "Enter") return; const tr = e.target.closest("tr[data-eid]"); if (tr) selectEvent(tr.dataset.eid, true); });
 $("#evChips").addEventListener("click", e => { const b = e.target.closest("button[data-eid]"); if (b) selectEvent(b.dataset.eid, false); });
+for (const [id, k, num] of [["rhType","type"],["rhRegion","region"],["rhMetric","metric"],["rhStep","step",true]])
+  $("#" + id).addEventListener("click", e => { const b = e.target.closest("button[data-v]"); if (!b) return; RH[k] = num ? +b.dataset.v : b.dataset.v; rhSave(); rhRender(); });
+$("#rhEvents").addEventListener("click", e => { const b = e.target.closest("button[data-eid]"); if (!b) return; const id = b.dataset.eid; RH.sel.has(id) ? RH.sel.delete(id) : RH.sel.add(id); rhRender(); });
+$("#rhAll").addEventListener("click", () => { rhEvents().forEach(e => RH.sel.add(e)); rhRender(); });
+$("#rhNone").addEventListener("click", () => { RH.sel.clear(); rhRender(); });
 $("#rankPeriod").addEventListener("change", () => { $("#rankCustom").hidden = $("#rankPeriod").value !== "custom"; renderRanking(); });
 ["#rankFrom", "#rankTo"].forEach(id => $(id).addEventListener("change", renderRanking));
 $("#rankDir").addEventListener("click", e => { const b = e.target.closest("button[data-d]"); if (!b) return; STATE.rankDir = b.dataset.d; renderRanking(); });
@@ -1439,11 +1785,12 @@ $("#rangeSeg").addEventListener("click", e => { const b = e.target.closest("butt
 ["input","change"].forEach(t => { $("#logFilter").addEventListener(t, () => { STATE.logShown = 20; renderLog(); }); });
 $("#logEvent").addEventListener("change", () => { STATE.logShown = 20; renderLog(); });
 $("#logYear").addEventListener("change", () => { STATE.logShown = 20; renderLog(); });
+$("#logPodium").addEventListener("change", () => { STATE.logShown = 20; renderLog(); });
 $("#histEvent").addEventListener("change", renderHistory);
 $("#histShow").addEventListener("change", renderHistory);
 $("#moreBtn").addEventListener("click", () => { STATE.logShown += 20; renderLog(); });
 let rT = null; let lastW = innerWidth;
-addEventListener("resize", () => { if (innerWidth === lastW) return; lastW = innerWidth; clearTimeout(rT); rT = setTimeout(() => { if (STATE) { drawProg(); drawHist(); drawYears(); } }, 150); });
+addEventListener("resize", () => { if (innerWidth === lastW) return; lastW = innerWidth; clearTimeout(rT); rT = setTimeout(() => { if (STATE) { drawProg(); drawHist(); drawYears(); rhRender(); } }, 150); });
 document.addEventListener("click", e => { if (e.target.id === "refreshBtn") loadId(e.target.dataset.id); });
 
 /* ---------- boot ---------- */
