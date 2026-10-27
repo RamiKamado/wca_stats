@@ -1562,7 +1562,9 @@ function rhCompute(eid, type, data, countries){
   const add = (t, i, d) => { for (i++; i <= u; i += i & -i) t[i] += d; };
   const sum = (t, i) => { let s = 0; for (; i > 0; i -= i & -i) s += t[i]; return s; };
   const cur = new Int32Array(countries.length).fill(-1);
-  const first = mine[0][0], last = data.nM - 1;
+  // 未来の月は表示しない（データの期間と、見ている人の今日の月の早いほうまで）
+  const now = new Date(), nowM = (now.getFullYear() - 1982) * 12 + now.getMonth();
+  const first = mine[0][0], last = Math.min(data.nM - 1, nowM);
   if (first > last) return null;
   const n = last - first + 1;
   const out = {first, last, rank:[new Int32Array(n), new Int32Array(n), new Int32Array(n)], total:[new Int32Array(n), new Int32Array(n), new Int32Array(n)], pb:new Float64Array(n),

@@ -137,6 +137,7 @@ def main():
         # 結果を種目ごとにまとめる（選手番号・月・単発・平均）
         per_event = {}
         n = 0
+        max_result_month = -1
         for comp, ev, pid, best, avg in table(z, "results", ["competition_id", "event_id", "person_id", "best", "average"]):
             m = comp_month.get(comp)
             p = pidx.get(pid)
@@ -149,10 +150,23 @@ def main():
             if arrs is None:
                 arrs = per_event[ev] = (array.array("i"), array.array("i"), array.array("q"), array.array("q"))
             arrs[0].append(p); arrs[1].append(m); arrs[2].append(b); arrs[3].append(a)
+            if m > max_result_month:
+                max_result_month = m
             n += 1
         log("results", n, "events", len(per_event))
 
-    n_months = max(comp_month.values()) + 1
+    # 期間は「結果がある最後の月」から「エクスポートの日付の月（＝作成時点の今月）」まで。
+    # エクスポートにはこれから開催される大会も入っているので、大会一覧の最大の月は使わない。
+    now_month = None
+    for d in (export_date, time.strftime("%Y-%m-%d", time.gmtime())):
+        try:
+            now_month = (int(d[:4]) - BASE_YEAR) * 12 + (int(d[5:7]) - 1)
+            break
+        except (TypeError, ValueError):
+            continue
+    last_month = max_result_month if now_month is None else max(max_result_month, now_month)
+    n_months = last_month + 1
+    log("months", n_months, "last", f"{BASE_YEAR + last_month // 12}/{last_month % 12 + 1:02d}")
     files = {}
     for ev in sorted(per_event):
         P, M, B, A = per_event[ev]
