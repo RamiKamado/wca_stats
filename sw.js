@@ -1,9 +1,11 @@
 /* WCA 個人成績ビューア — Service Worker
  * - アプリ本体（HTML・アイコン）をキャッシュし、電波がないときも起動できるようにする
  * - 成績データは「ネット優先・失敗したらキャッシュ」で取得し、一度見た選手はオフラインでも表示できる
- * index.html を更新したら VERSION を上げると、古いキャッシュが確実に入れ替わります。
+ * バージョンは app.js の APP_VERSION（登録時に sw.js?v=… として渡される）。
+ * app.js の APP_VERSION を上げると、新しい Service Worker に切り替わり、古いキャッシュが入れ替わります。
+ * このファイルを編集する必要はありません。
  */
-const VERSION = "v15";
+const VERSION = new URL(self.location.href).searchParams.get("v") || "dev";
 const SHELL = `wca-stats-shell-${VERSION}`;
 const DATA = "wca-stats-data";
 const FONTS = "wca-stats-fonts";
@@ -11,6 +13,7 @@ const RANK = "wca-stats-rankhist";
 const SHELL_FILES = [
   "./",
   "./index.html",
+  "./app.js",
   "./manifest.webmanifest",
   "./icons/apple-touch-icon.png",
   "./icons/icon-192.png",
