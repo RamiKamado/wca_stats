@@ -1,7 +1,7 @@
 "use strict";
 /* アプリのバージョン（更新したらここだけ変える。例: v01.17.00 → v01.17.01）
    大きな作り直し・機能追加・修正 の順に2桁ずつ。Service Worker のキャッシュもこの値で切り替わる。 */
-const APP_VERSION = "v01.17.04";
+const APP_VERSION = "v01.18.00";
 const DATA_SRC = "https://raw.githubusercontent.com/robiningelbrecht/wca-rest-api/v1/";
 const WCA_API = "https://www.worldcubeassociation.org/api/v0/";
 
@@ -781,11 +781,13 @@ function renderEvent(){
   const vals = e.solves.map(s => plotY(eid, s.v, false));
   const mean = vals.length ? vals.reduce((a,b)=>a+b,0)/vals.length : null;
   const med = median(vals);
-  const firstA = e.pbA[0], pbA = e.pbA.at(-1);
-  const improve = firstA && pbA && firstA !== pbA ? (() => {
-    const a = plotY(eid, firstA.v, true), b = plotY(eid, pbA.v, true);
-    return kind === "mbf" ? `${fmtPlot(eid,a)} → ${fmtPlot(eid,b)}` : `${fmtVal(eid,firstA.v,true)} → ${fmtVal(eid,pbA.v,true)}（−${(100*(a-b)/a).toFixed(1)}%）`;
-  })() : "–";
+  // 初めての記録 → 現在の自己ベスト（と縮めた割合）
+  const improveOf = (list, isAvg) => {
+    const f = list[0], l = list.at(-1);
+    if (!f || !l || f === l) return "–";
+    const a = plotY(eid, f.v, isAvg), b = plotY(eid, l.v, isAvg);
+    return kind === "mbf" ? `${fmtPlot(eid,a)} → ${fmtPlot(eid,b)}` : `${fmtVal(eid,f.v,isAvg)} → ${fmtVal(eid,l.v,isAvg)}（−${(100*(a-b)/a).toFixed(1)}%）`;
+  };
   const lastR = e.rounds.at(-1);
   const rows = [
     ["出場大会 / ラウンド", `${e.comps.size} / ${e.rounds.length}`],
@@ -797,15 +799,45 @@ function renderEvent(){
     [kind === "mbf" ? "成功時の平均ポイント" : "全成功ソルブの平均", mean == null ? "–" : fmtPlot(eid, mean)],
     ["中央値", med == null ? "–" : fmtPlot(eid, med)],
     ["PB更新回数（単発 / 平均）", `${e.pbS.length} / ${e.pbA.length}`],
-    ["初の平均 → 平均PB", improve],
+    ["初の単発 → 単発PB", improveOf(e.pbS, false)],
+    ["初の平均 → 平均PB", improveOf(e.pbA, true)],
     ["最終出場", lastR ? lastR.date : "–"]
   ];
-  $("#evStats").innerHTML = rows.map(([k,v]) => `<dt>${k}</dt><dd>${esc(v)}</dd>`).join("");
+  // Rolling aoN：大会での全試技を時系列に並べ、連続するN回の平均が最も良かった区間
+  if (kind !== "mbf") for (const n of [5, 12, 25, 50, 100]) {
+    const b = rollingBest(eid, e.rounds, n);
+    // 試技数が足りなければ「–」、どの区間も DNF なら「DNF」
+    rows.push([`Rolling ao${n}`, !b ? "–" : b.dnf ? "DNF" : fmtVal(eid, kind === "fm" ? Math.round(b.avg * 100) : Math.round(b.avg), true),
+      b && !b.dnf ? `${b.from.date.replaceAll("-", "/")} - ${b.to.date.replaceAll("-", "/")}` : ""]);
+  }
+  $("#evStats").innerHTML = rows.map(([k,v,sub]) => `<dt>${k}</dt><dd>${esc(v)}</dd>${sub ? `<dd class="rng">${esc(sub)}</dd>` : ""}`).join("");
 
   renderRanking();
 
   renderYearTable();
   drawProg(); drawHist();
+}
+
+/* Rolling aoN の最良値
+   試技は大会の日付・ラウンドの順・試技の順に並べる（DNS と未実施は除き、DNF は含める）。
+   cstimer などと同じく、上下それぞれ ceil(N×5%) 回を除いた平均（ao5・ao12 は1回、ao25 は2回、ao50 は3回、ao100 は5回）。
+   除いた後に DNF が残る区間は DNF とし、最良値の候補にしない。 */
+function rollingBest(eid, rounds, n){
+  const att = [];
+  for (const r of rounds) for (const v of r.solves) if (v > 0 || v === -1) att.push({v, r});
+  if (att.length < n) return null;
+  const trim = Math.ceil(n * 0.05), keep = n - 2 * trim;
+  const w = new Float64Array(n);
+  let best = null;
+  for (let i = 0; i + n <= att.length; i++) {
+    for (let k = 0; k < n; k++) { const v = att[i + k].v; w[k] = v > 0 ? v : Infinity; }
+    w.sort();
+    if (w[n - trim - 1] === Infinity) continue;
+    let sum = 0; for (let k = trim; k < n - trim; k++) sum += w[k];
+    const avg = sum / keep;
+    if (!best || avg < best.avg) best = {avg, from:att[i].r, to:att[i + n - 1].r};
+  }
+  return best || {dnf:true};
 }
 
 /* ランキングの期間 */
