@@ -1,7 +1,7 @@
 "use strict";
 /* アプリのバージョン（更新したらここだけ変える。例: v01.17.00 → v01.17.01）
    大きな作り直し・機能追加・修正 の順に2桁ずつ。Service Worker のキャッシュもこの値で切り替わる。 */
-const APP_VERSION = "v01.17.02";
+const APP_VERSION = "v01.17.03";
 const DATA_SRC = "https://raw.githubusercontent.com/robiningelbrecht/wca-rest-api/v1/";
 const WCA_API = "https://www.worldcubeassociation.org/api/v0/";
 
@@ -16,8 +16,8 @@ const EVENTS = [
 ];
 const EVM = {}; EVENTS.forEach(([id,name,kind],i)=>EVM[id]={id,name,kind,order:i});
 const ev = id => EVM[id] || {id,name:id,kind:"time",order:99};
-const RO = {"Qualification round":0,"First round":1,"Second round":2,"Semi Final":3,"Final":4};
-const RJ = {"Qualification round":"予選","First round":"1回戦","Second round":"2回戦","Semi Final":"準決勝","Final":"決勝"};
+const RO = {"Qualification round":0,"First round":1,"Second round":2,"B Final":2.5,"Semi Final":3,"Final":4};
+const RJ = {"Qualification round":"予選","First round":"1回戦","Second round":"2回戦","B Final":"B決勝","Semi Final":"準決勝","Final":"決勝"};
 const FJ = {"Average of 5":"Ao5","Mean of 3":"Mo3","Best of 1":"Bo1","Best of 2":"Bo2","Best of 3":"Bo3","Best of 5":"Bo5"};
 const $ = s => document.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -197,8 +197,9 @@ async function loadId(id){
     return;
   }
   if (my !== loadToken) return;
-  loadRecords(person.id);
+  const recP = loadRecords(person.id);
   loadMirrorDate();
+  POSTED = [];
   const ids = Object.keys(person.results || {});
   const comps = await loadComps(ids, (d,n) => {
     if (my !== loadToken) return;
@@ -207,12 +208,29 @@ async function loadId(id){
   if (my !== loadToken) return;
   const missing = ids.filter(i => !comps[i]).length;
   render(person, comps);
-  setStatus(`<span>${esc(person.name)}（${esc(person.id)}）を表示中</span>` + (missing ? `<span>※ ${missing}大会の開催日を取得できず、年のみで並べています</span>` : "")
+  const showStatus = () => setStatus(`<span>${esc(person.name)}（${esc(person.id)}）を表示中</span>` + (missing ? `<span>※ ${missing}大会の開催日を取得できず、年のみで並べています</span>` : "")
+    + (POSTED.length ? `<span>WCA公式サイトに反映済みの最新 ${POSTED.length}大会を、WCA公式APIから公式記録として取り込みました</span>` : "")
     + `<button type="button" class="btn ghost" id="refreshBtn" data-id="${esc(person.id)}">再読み込み</button>`);
+  showStatus();
   try { localStorage.setItem("wca-last-id", person.id); } catch(e){}
   try { history.replaceState(null, "", location.pathname + "?id=" + encodeURIComponent(person.id)); } catch(e){}
   showHomeHint(person);
-  loadLive(person, comps, my);
+  // WCA公式サイトに反映済みの大会を確認してから、残りの大会だけを WCA Live で探す
+  let base = {person, comps};
+  const api = await recP;
+  if (my !== loadToken) return;
+  if (api) {
+    const posted = mergePosted(person, api);
+    if (posted.added.length) {
+      const more = await loadPostedComps(posted.added);
+      if (my !== loadToken) return;
+      base = {person:posted.person, comps:{...comps, ...more}};
+      POSTED = posted.added;
+      render(base.person, base.comps);
+      showStatus(); showHomeHint(person);
+    }
+  }
+  loadLive(base.person, base.comps, my);
 }
 
 async function onSearch(input){
@@ -355,9 +373,11 @@ function recClass(code){ return code === "WR" ? "wr" : code === "NR" ? "nr" : "c
 function badge(code){ return code ? `<span class="rec rec-${recClass(code)}" title="${code === "WR" ? "世界記録" : code === "NR" ? "国内記録" : "大陸記録"}">${esc(code)}</span>` : ""; }
 async function loadRecords(id){
   RECS = {id, state:"loading", map:null}; updateRecNote();
+  let raw = null;
   try {
     const arr = await fetchJSON(WCA_API + "persons/" + encodeURIComponent(id) + "/results");
-    if (RECS.id !== id) return;
+    if (RECS.id !== id) return null;
+    raw = Array.isArray(arr) ? arr : null;
     const map = new Map();
     for (const x of (Array.isArray(arr) ? arr : [])) {
       if (!x.regional_single_record && !x.regional_average_record) continue;
@@ -365,11 +385,50 @@ async function loadRecords(id){
     }
     RECS = {id, state:"ok", map};
   } catch(e) {
-    if (RECS.id !== id) return;
+    if (RECS.id !== id) return null;
     RECS = {id, state:"error", map:null};
   }
   if (STATE && STATE.person.id === id) { applyRecs(); renderRecordViews(); }
   updateRecNote();
+  return raw;
+}
+
+/* ---------- WCA公式サイトに反映済みだが、ミラー（1日1回更新）にまだ入っていない大会 ----------
+   WCA公式API（すぐに反映される）の結果に含まれていてミラーに無い大会は、公式記録として取り込む。
+   こうした大会は WCA Live の速報としては扱わない。 */
+const RT_NAME = {"0":"Qualification round","h":"Qualification round","1":"First round","d":"First round","2":"Second round","e":"Second round",
+  "3":"Semi Final","g":"Semi Final","b":"B Final","c":"Final","f":"Final"};
+const API_FORMATS = {"1":"Best of 1","2":"Best of 2","3":"Best of 3","5":"Best of 5","m":"Mean of 3","a":"Average of 5"};
+let POSTED = [];
+function mergePosted(person, arr){
+  const have = new Set(Object.keys(person.results || {})), add = {};
+  for (const x of arr) {
+    if (!x || typeof x !== "object") continue;
+    const cid = str(x.competition_id, 64), eid = str(x.event_id, 16);
+    if (!TOKEN_RE.test(cid) || !TOKEN_RE.test(eid) || have.has(cid)) continue;
+    if (x.wca_id != null && str(x.wca_id, 10).toUpperCase() !== person.id) continue;
+    const solves = (Array.isArray(x.attempts) ? x.attempts : []).slice(0, 10)
+      .map(a => num(a && typeof a === "object" ? (a.value ?? a.result) : a));
+    ((add[cid] ??= {})[eid] ??= []).push({
+      round:RT_NAME[str(x.round_type_id, 2)] || "First round", position:numOrNull(x.pos), best:num(x.best), average:num(x.average),
+      format:API_FORMATS[str(x.format_id, 2)] || str(x.format_id, 20), solves
+    });
+  }
+  const ids = Object.keys(add);
+  if (!ids.length) return {person, added:[]};
+  return {person:{...person, results:{...person.results, ...add}, numberOfCompetitions:(person.numberOfCompetitions ?? have.size) + ids.length}, added:ids};
+}
+async function loadPostedComps(ids){
+  // まずミラーの大会情報（大会は告知時点でミラーに入っている）、無ければ WCA公式API から取得する
+  const out = await loadComps(ids, () => {});
+  await Promise.all(ids.filter(id => !out[id]).map(async id => {
+    try {
+      const j = await fetchJSON(WCA_API + "competitions/" + encodeURIComponent(id));
+      const m = cleanCompMeta({name:j?.name, city:j?.city, country:j?.country_iso2, date:j?.start_date, end:j?.end_date});
+      if (m.date) { cachePut(id, m); out[id] = m; }
+    } catch(e) {}
+  }));
+  return out;
 }
 function applyRecs(){
   if (!STATE) return;
