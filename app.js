@@ -1,7 +1,7 @@
 "use strict";
 /* アプリのバージョン（更新したらここだけ変える。例: v01.17.00 → v01.17.01）
    大きな作り直し・機能追加・修正 の順に2桁ずつ。Service Worker のキャッシュもこの値で切り替わる。 */
-const APP_VERSION = "v01.17.01";
+const APP_VERSION = "v01.17.02";
 const DATA_SRC = "https://raw.githubusercontent.com/robiningelbrecht/wca-rest-api/v1/";
 const WCA_API = "https://www.worldcubeassociation.org/api/v0/";
 
@@ -402,11 +402,18 @@ function analyze(person, comps){
   }
   rounds.sort((a,b) => a.date.localeCompare(b.date) || a.cid.localeCompare(b.cid) || ev(a.eid).order - ev(b.eid).order || a.ro - b.ro);
   const E = {}; const pbRound = new Map();
+  // 表彰台（入賞）は WCA公式と同じ数え方: 終了した決勝で1〜3位、かつ成功した試技がある（best > 0）。
+  // 決勝が2つのラウンドに分かれている（リンクされたラウンド）場合も、1大会・1種目につき1回だけ数える。
+  const finalSeen = new Set(), podBest = new Map();
   let valid = 0, dnf = 0, dns = 0, timeSum = 0;
   for (const r of rounds) {
     const e = E[r.eid] ??= {eid:r.eid, rounds:[], solves:[], dnf:0, dns:0, finals:0, pod:[0,0,0], pbS:[], pbA:[], comps:new Set(), years:{}};
     e.rounds.push(r); e.comps.add(r.cid);
-    if (r.round === "Final") { e.finals++; if (r.finished && r.best > 0 && r.position >= 1 && r.position <= 3) e.pod[r.position-1]++; }
+    if (r.round === "Final") {
+      const k = r.cid + "|" + r.eid;
+      if (!finalSeen.has(k)) { finalSeen.add(k); e.finals++; }
+      if (r.finished && r.best > 0 && r.position >= 1 && r.position <= 3 && (!podBest.has(k) || r.position < podBest.get(k).position)) podBest.set(k, r);
+    }
     const y = r.date.slice(0,4);
     const Y = e.years[y] ??= {rounds:0, valid:0, att:0, sum:0, bestS:null, bestA:null, rbSum:0, rbN:0, raSum:0, raN:0, raDnf:0};
     Y.rounds++;
@@ -430,13 +437,16 @@ function analyze(person, comps){
       if (Y.bestA === null || key(r.eid, r.average) < key(r.eid, Y.bestA)) Y.bestA = r.average;
     }
   }
+  // 入賞の集計（種目ごと・公式記録のみのメダル数）
+  const medals = [0, 0, 0];
+  for (const r of podBest.values()) { E[r.eid].pod[r.position - 1]++; if (!r.live) medals[r.position - 1]++; }
   // competitions
   const compList = Object.keys(person.results || {}).map(cid => {
     const m = comps[cid];
     const rs = rounds.filter(r => r.cid === cid);
     return {cid, m, date:m?.date || fallbackDate(cid), name:m?.name || cid, city:m?.city || "", country:m?.country || "", rounds:rs};
   }).sort((a,b) => b.date.localeCompare(a.date));
-  return {rounds, E, pbRound, compList, totals:{valid, dnf, dns, timeSum}};
+  return {rounds, E, pbRound, compList, medals, totals:{valid, dnf, dns, timeSum}};
 }
 
 /* ---------- rendering ---------- */
@@ -465,7 +475,8 @@ function renderProfile(){
   $("#pName").textContent = person.name;
   $("#pMeta").innerHTML = `<a class="idpill" href="https://www.worldcubeassociation.org/persons/${esc(person.id)}" target="_blank" rel="noopener">${esc(person.id)}</a>`
     + (first ? `<span>${esc(first.date.slice(0,7).replace("-","年"))}月 初出場</span><span>最新 ${esc(last.date)}</span>` : "");
-  const md = person.medals || {}, rc = person.records || {};
+  // メダル数は成績から WCA公式と同じ数え方で数える（WCA Live の速報は含めない）
+  const md = {gold:STATE.medals[0], silver:STATE.medals[1], bronze:STATE.medals[2]}, rc = person.records || {};
   const recSum = t => ((rc.single||{})[t]||0) + ((rc.average||{})[t]||0);
   const recDetail = t => `単発${(rc.single||{})[t]||0}・平均${(rc.average||{})[t]||0}`;
   let h = [["gold","金"],["silver","銀"],["bronze","銅"]].map(([c,l]) =>
@@ -1095,7 +1106,7 @@ function renderLog(){
   const shown = list.slice(0, STATE.logShown);
   $("#compLog").innerHTML = shown.length ? shown.map(c => {
     const rs = c.rounds.filter(r => !fe || r.eid === fe).sort((a,b) => ev(a.eid).order - ev(b.eid).order || b.ro - a.ro);
-    const pods = c.rounds.filter(isPodium);
+    const pods = c.rounds.filter(isPodium).filter((r, i, a) => a.findIndex(x => x.eid === r.eid) === i);
     const pbs = c.rounds.filter(r => pbRound.has(r)).length;
     const evCount = new Set(c.rounds.map(r => r.eid)).size;
     const cls = ["gold","silver","bronze"];
