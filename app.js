@@ -1,7 +1,7 @@
 "use strict";
 /* アプリのバージョン（更新したらここだけ変える。例: v01.17.00 → v01.17.01）
    大きな作り直し・機能追加・修正 の順に2桁ずつ。Service Worker のキャッシュもこの値で切り替わる。 */
-const APP_VERSION = "v01.17.03";
+const APP_VERSION = "v01.17.04";
 const DATA_SRC = "https://raw.githubusercontent.com/robiningelbrecht/wca-rest-api/v1/";
 const WCA_API = "https://www.worldcubeassociation.org/api/v0/";
 
@@ -198,6 +198,7 @@ async function loadId(id){
   }
   if (my !== loadToken) return;
   const recP = loadRecords(person.id);
+  const wpP = fetchJSON(WCA_API + "persons/" + encodeURIComponent(person.id)).then(cleanWcaPerson).catch(() => null);
   loadMirrorDate();
   POSTED = [];
   const ids = Object.keys(person.results || {});
@@ -216,8 +217,8 @@ async function loadId(id){
   try { history.replaceState(null, "", location.pathname + "?id=" + encodeURIComponent(person.id)); } catch(e){}
   showHomeHint(person);
   // WCA公式サイトに反映済みの大会を確認してから、残りの大会だけを WCA Live で探す
-  let base = {person, comps};
-  const api = await recP;
+  let base = {person, comps}, changed = false;
+  const [api, wp] = await Promise.all([recP, wpP]);
   if (my !== loadToken) return;
   if (api) {
     const posted = mergePosted(person, api);
@@ -225,11 +226,12 @@ async function loadId(id){
       const more = await loadPostedComps(posted.added);
       if (my !== loadToken) return;
       base = {person:posted.person, comps:{...comps, ...more}};
-      POSTED = posted.added;
-      render(base.person, base.comps);
-      showStatus(); showHomeHint(person);
+      POSTED = posted.added; changed = true;
     }
   }
+  // 自己ベスト・順位などは、ミラー（1日1回更新）ではなく WCA公式API の最新の値を使う
+  if (wp) { base = {...base, person:applyWcaPerson(base.person, wp)}; changed = true; }
+  if (changed) { render(base.person, base.comps); showStatus(); showHomeHint(person); }
   loadLive(base.person, base.comps, my);
 }
 
@@ -418,6 +420,28 @@ function mergePosted(person, arr){
   if (!ids.length) return {person, added:[]};
   return {person:{...person, results:{...person.results, ...add}, numberOfCompetitions:(person.numberOfCompetitions ?? have.size) + ids.length}, added:ids};
 }
+/* WCA公式APIの選手情報（WCA公式サイトと同じ最新の自己ベスト・順位・大会数・記録数） */
+function cleanWcaPerson(j){
+  j = obj(j);
+  const singles = [], averages = [];
+  for (const [eid, pr] of Object.entries(obj(j.personal_records))) {
+    if (!TOKEN_RE.test(eid)) continue;
+    const conv = x => x && typeof x === "object" && num(x.best) > 0
+      ? {eventId:eid, best:num(x.best), rank:{world:numOrNull(x.world_rank), continent:numOrNull(x.continent_rank), country:numOrNull(x.country_rank)}} : null;
+    const sg = conv(pr?.single), av = conv(pr?.average);
+    if (sg) singles.push(sg);
+    if (av) averages.push(av);
+  }
+  if (!singles.length) return null;
+  const rc = obj(j.records);
+  return {rank:{singles, averages}, competitionCount:numOrNull(j.competition_count),
+    recordTotals:{WR:num(rc.world), CR:num(rc.continental), NR:num(rc.national)}};
+}
+function applyWcaPerson(person, wp){
+  return {...person, rank:wp.rank, recordTotals:wp.recordTotals, rankSource:"wca",
+    numberOfCompetitions:wp.competitionCount ?? person.numberOfCompetitions};
+}
+
 async function loadPostedComps(ids){
   // まずミラーの大会情報（大会は告知時点でミラーに入っている）、無ければ WCA公式API から取得する
   const out = await loadComps(ids, () => {});
@@ -536,8 +560,9 @@ function renderProfile(){
     + (first ? `<span>${esc(first.date.slice(0,7).replace("-","年"))}月 初出場</span><span>最新 ${esc(last.date)}</span>` : "");
   // メダル数は成績から WCA公式と同じ数え方で数える（WCA Live の速報は含めない）
   const md = {gold:STATE.medals[0], silver:STATE.medals[1], bronze:STATE.medals[2]}, rc = person.records || {};
-  const recSum = t => ((rc.single||{})[t]||0) + ((rc.average||{})[t]||0);
-  const recDetail = t => `単発${(rc.single||{})[t]||0}・平均${(rc.average||{})[t]||0}`;
+  const rt = person.recordTotals;
+  const recSum = t => rt ? (rt[t] || 0) : ((rc.single||{})[t]||0) + ((rc.average||{})[t]||0);
+  const recDetail = t => rt ? `${{WR:"世界記録", CR:"大陸記録", NR:"国内記録"}[t]}（WCA公式）` : `単発${(rc.single||{})[t]||0}・平均${(rc.average||{})[t]||0}`;
   let h = [["gold","金"],["silver","銀"],["bronze","銅"]].map(([c,l]) =>
     `<div class="honor"><span class="disc d-${c}">${md[c]||0}</span><small>${l}メダル</small></div>`).join("");
   for (const t of ["WR","CR","NR"]) if (recSum(t)) h += `<div class="honor" title="${recDetail(t)}"><span class="disc d-rec">${recSum(t)}</span><small>${t}</small></div>`;
@@ -732,7 +757,7 @@ function renderPB(){
   }
   $("#pbTable").innerHTML = h + "</tbody>";
   $("#pbLiveNote").hidden = !livePBList().length;
-  $("#pbDataDate").textContent = MIRROR_DATE ? `・${MIRROR_DATE} 時点` : "";
+  $("#pbDataDate").textContent = STATE.person.rankSource === "wca" ? "・WCA公式サイトの最新データ" : MIRROR_DATE ? `・${MIRROR_DATE} 時点` : "";
 }
 
 function renderChips(){
@@ -1367,7 +1392,8 @@ function rhRender(){
   const bytes = loadingN.reduce((a, e) => a + (meta.files[e]?.[RH.type]?.bytes || 0), 0);
   const rhDate = (meta.exportDate || meta.builtAt || "").slice(0, 10);
   status.textContent = `データ: WCA公式の結果エクスポート（${rhDate} 時点）`
-    + (MIRROR_DATE && rhDate && MIRROR_DATE !== rhDate ? `。自己ベストとランキングの欄は ${MIRROR_DATE} 時点のデータのため、その間に反映された大会の分だけ最新の順位が違うことがあります` : "")
+    + (STATE.person.rankSource === "wca" ? `。自己ベストとランキングの欄はWCA公式サイトの最新データのため、${rhDate} より後に反映された大会の分だけ最新の順位が違うことがあります`
+      : MIRROR_DATE && rhDate && MIRROR_DATE !== rhDate ? `。自己ベストとランキングの欄は ${MIRROR_DATE} 時点のデータのため、その間に反映された大会の分だけ最新の順位が違うことがあります` : "")
     + (loadingN.length ? `・${loadingN.map(e => ev(e).name).join("・")} を読み込み中（約${(bytes / 1048576).toFixed(1)}MB）…` : "");
   // 凡例
   const regs = rhRegs(null);
