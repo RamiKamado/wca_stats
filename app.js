@@ -1,7 +1,7 @@
 "use strict";
 /* アプリのバージョン（更新したらここだけ変える。例: v01.17.00 → v01.17.01）
    大きな作り直し・機能追加・修正 の順に2桁ずつ。Service Worker のキャッシュもこの値で切り替わる。 */
-const APP_VERSION = "v01.18.00";
+const APP_VERSION = "v01.19.00";
 const DATA_SRC = "https://raw.githubusercontent.com/robiningelbrecht/wca-rest-api/v1/";
 const WCA_API = "https://www.worldcubeassociation.org/api/v0/";
 
@@ -804,10 +804,10 @@ function renderEvent(){
     ["最終出場", lastR ? lastR.date : "–"]
   ];
   // Rolling aoN：大会での全試技を時系列に並べ、連続するN回の平均が最も良かった区間
-  if (kind !== "mbf") for (const n of [5, 12, 25, 50, 100]) {
-    const b = rollingBest(eid, e.rounds, n);
+  if (kind !== "mbf") for (const [label, n, mean] of [["mo3", 3, true], ["ao5", 5], ["ao12", 12], ["ao25", 25], ["ao50", 50], ["ao100", 100]]) {
+    const b = rollingBest(eid, e.rounds, n, mean);
     // 試技数が足りなければ「–」、どの区間も DNF なら「DNF」
-    rows.push([`Rolling ao${n}`, !b ? "–" : b.dnf ? "DNF" : fmtVal(eid, kind === "fm" ? Math.round(b.avg * 100) : Math.round(b.avg), true),
+    rows.push([`Rolling ${label}`, !b ? "–" : b.dnf ? "DNF" : fmtVal(eid, kind === "fm" ? Math.round(b.avg * 100) : Math.round(b.avg), true),
       b && !b.dnf ? `${b.from.date.replaceAll("-", "/")} - ${b.to.date.replaceAll("-", "/")}` : ""]);
   }
   $("#evStats").innerHTML = rows.map(([k,v,sub]) => `<dt>${k}</dt><dd>${esc(v)}</dd>${sub ? `<dd class="rng">${esc(sub)}</dd>` : ""}`).join("");
@@ -822,11 +822,12 @@ function renderEvent(){
    試技は大会の日付・ラウンドの順・試技の順に並べる（DNS と未実施は除き、DNF は含める）。
    cstimer などと同じく、上下それぞれ ceil(N×5%) 回を除いた平均（ao5・ao12 は1回、ao25 は2回、ao50 は3回、ao100 は5回）。
    除いた後に DNF が残る区間は DNF とし、最良値の候補にしない。 */
-function rollingBest(eid, rounds, n){
+function rollingBest(eid, rounds, n, mean){
   const att = [];
   for (const r of rounds) for (const v of r.solves) if (v > 0 || v === -1) att.push({v, r});
   if (att.length < n) return null;
-  const trim = Math.ceil(n * 0.05), keep = n - 2 * trim;
+  // mo3（mean）は何も除かずに平均する（1回でも DNF なら DNF）
+  const trim = mean ? 0 : Math.ceil(n * 0.05), keep = n - 2 * trim;
   const w = new Float64Array(n);
   let best = null;
   for (let i = 0; i + n <= att.length; i++) {
