@@ -155,6 +155,13 @@ td.bl,th.bl{border-left:1px solid var(--line)}
 dl.stats{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;margin:0;font-size:14px}
 dl.stats dt{color:var(--muted)}
 dl.stats dd{margin:0;text-align:right;font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+#rollTable tbody tr{cursor:pointer}
+#rollTable th:first-child,#rollTable td:first-child{position:sticky;left:0;z-index:1;background:var(--surface);box-shadow:inset -1px 0 0 var(--line)}
+#rollTable th:first-child{background:var(--sunk);z-index:2}
+#rollTable tbody tr:hover td{background:var(--sunk)}
+#rollTable td.roll{line-height:1.25;vertical-align:top}
+#rollTable td.roll b{display:block;font-weight:600}
+#rollTable td.roll small{display:block;font-size:11px;color:var(--faint)}
 dl.stats dd.rng{grid-column:1/-1;margin-top:-5px;font-size:11.5px;color:var(--faint)}
 .rankhead{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:14px 16px 10px}
 .rankhead h3{margin:0;font:600 15px var(--f-body);color:var(--muted);letter-spacing:.02em}
@@ -343,6 +350,12 @@ footer{margin-top:48px;padding-top:16px;border-top:1px solid var(--line);color:v
       <p class="lede">単発・平均のPBと世界/大陸/国内順位（WCA公式ランキング<span id="pbDataDate"></span>）。表彰台は決勝ラウンドでの1〜3位の回数です。</p>
       <p class="lede" id="pbLiveNote" hidden><span class="tag live">速報</span> の記録の順位は「公式の順位→速報の記録での順位」です。公式ランキングの上位1000人に、直近35日にWCA Liveで行われた大会での他の選手の速報を加えて計算しています。1000位より下になる場合は「?」と表示します。 <span class="recnote" id="pbOthersNote"></span></p>
       <div class="panel scroll"><table id="pbTable"></table></div>
+    </section>
+
+    <section id="secRolling">
+      <h2>Rolling Average <small>行をクリックすると種目ごとの詳細へ</small></h2>
+      <p class="lede">大会での全試技を時系列（大会の日付 → ラウンド → 試技の順）に並べ、連続するN回の平均が最も良かった値と、その期間（大会の開始日）。ao は上下それぞれ5%（ao5・ao12 は1回、ao25 は2回、ao50 は3回、ao100 は5回）を除いた平均、mo3 は3回の単純平均です。DNF は最も遅い記録として扱い、DNS は数えません。「–」は試技数が足りない、「DNF」はどの区間も DNF になることを表します。</p>
+      <div class="panel scroll"><table id="rollTable"></table></div>
     </section>
 
     <section id="secRankHist">

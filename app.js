@@ -1,7 +1,7 @@
 "use strict";
 /* アプリのバージョン（更新したらここだけ変える。例: v01.17.00 → v01.17.01）
    大きな作り直し・機能追加・修正 の順に2桁ずつ。Service Worker のキャッシュもこの値で切り替わる。 */
-const APP_VERSION = "v01.19.00";
+const APP_VERSION = "v01.20.00";
 const DATA_SRC = "https://raw.githubusercontent.com/robiningelbrecht/wca-rest-api/v1/";
 const WCA_API = "https://www.worldcubeassociation.org/api/v0/";
 
@@ -547,7 +547,7 @@ function render(person, comps){
   $("#appTitle").setAttribute("content", local || person.name);
   applyRecs();
   initRankPeriod(!!prevEid);
-  renderProfile(); renderTiles(); renderPB(); renderChips(); renderEvent(); renderActivity(); initHistFilters(); renderHistory(); initLogFilters(!!prevEid); renderLog(); updateRecNote();
+  renderProfile(); renderTiles(); renderPB(); renderRolling(); renderChips(); renderEvent(); renderActivity(); initHistFilters(); renderHistory(); initLogFilters(!!prevEid); renderLog(); updateRecNote();
   rhInit();
 }
 
@@ -803,19 +803,34 @@ function renderEvent(){
     ["初の平均 → 平均PB", improveOf(e.pbA, true)],
     ["最終出場", lastR ? lastR.date : "–"]
   ];
-  // Rolling aoN：大会での全試技を時系列に並べ、連続するN回の平均が最も良かった区間
-  if (kind !== "mbf") for (const [label, n, mean] of [["mo3", 3, true], ["ao5", 5], ["ao12", 12], ["ao25", 25], ["ao50", 50], ["ao100", 100]]) {
-    const b = rollingBest(eid, e.rounds, n, mean);
-    // 試技数が足りなければ「–」、どの区間も DNF なら「DNF」
-    rows.push([`Rolling ${label}`, !b ? "–" : b.dnf ? "DNF" : fmtVal(eid, kind === "fm" ? Math.round(b.avg * 100) : Math.round(b.avg), true),
-      b && !b.dnf ? `${b.from.date.replaceAll("-", "/")} - ${b.to.date.replaceAll("-", "/")}` : ""]);
-  }
   $("#evStats").innerHTML = rows.map(([k,v,sub]) => `<dt>${k}</dt><dd>${esc(v)}</dd>${sub ? `<dd class="rng">${esc(sub)}</dd>` : ""}`).join("");
 
   renderRanking();
 
   renderYearTable();
   drawProg(); drawHist();
+}
+
+/* ---------- Rolling Average（種目 × mo3〜ao100 の表） ---------- */
+const ROLL_COLS = [["mo3", 3, true], ["ao5", 5], ["ao12", 12], ["ao25", 25], ["ao50", 50], ["ao100", 100]];
+function renderRolling(){
+  const {E, evIds} = STATE;
+  const ids = evIds.filter(id => ev(id).kind !== "mbf");
+  let h = `<thead><tr><th class="l">種目</th>${ROLL_COLS.map(([l]) => `<th>${l}</th>`).join("")}</tr></thead><tbody>`;
+  for (const id of ids) {
+    const e = E[id], fm = ev(id).kind === "fm";
+    h += `<tr data-eid="${esc(id)}" tabindex="0"><td class="l"><span class="evname">${esc(ev(id).name)}</span></td>` + ROLL_COLS.map(([, n, mean]) => {
+      const b = rollingBest(id, e.rounds, n, mean);
+      // 試技数が足りなければ「–」、どの区間も DNF なら「DNF」
+      if (!b) return `<td class="num"><span class="zero">–</span></td>`;
+      if (b.dnf) return `<td class="num"><span class="zero">DNF</span></td>`;
+      const v = fmtVal(id, fm ? Math.round(b.avg * 100) : Math.round(b.avg), true);
+      const d1 = b.from.date.replaceAll("-", "/"), d2 = b.to.date.replaceAll("-", "/");
+      return `<td class="num roll" title="${esc(compLabel(b.from))} 〜 ${esc(compLabel(b.to))}"><b>${esc(v)}</b><small>${esc(d1)}</small><small>- ${esc(d2)}</small></td>`;
+    }).join("") + `</tr>`;
+  }
+  if (!ids.length) h += `<tr><td class="l" colspan="${ROLL_COLS.length + 1}"><span class="zero">記録なし</span></td></tr>`;
+  $("#rollTable").innerHTML = h + "</tbody>";
 }
 
 /* Rolling aoN の最良値
@@ -1537,6 +1552,8 @@ function rhTable(sel){
 $("#searchForm").addEventListener("submit", e => { e.preventDefault(); onSearch($("#q").value); });
 $("#cands").addEventListener("click", e => { const b = e.target.closest("button[data-id]"); if (b) { $("#q").value = b.dataset.id; loadId(b.dataset.id); } });
 $("#pbTable").addEventListener("click", e => { const tr = e.target.closest("tr[data-eid]"); if (tr) selectEvent(tr.dataset.eid, true); });
+$("#rollTable").addEventListener("click", e => { const tr = e.target.closest("tr[data-eid]"); if (tr) selectEvent(tr.dataset.eid, true); });
+$("#rollTable").addEventListener("keydown", e => { if (e.key !== "Enter") return; const tr = e.target.closest("tr[data-eid]"); if (tr) selectEvent(tr.dataset.eid, true); });
 $("#pbTable").addEventListener("keydown", e => { if (e.key !== "Enter") return; const tr = e.target.closest("tr[data-eid]"); if (tr) selectEvent(tr.dataset.eid, true); });
 $("#evChips").addEventListener("click", e => { const b = e.target.closest("button[data-eid]"); if (b) selectEvent(b.dataset.eid, false); });
 for (const [id, k, num] of [["rhType","type"],["rhRegion","region"],["rhMetric","metric"],["rhStep","step",true]])
