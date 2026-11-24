@@ -1,7 +1,7 @@
 "use strict";
 /* アプリのバージョン（更新したらここだけ変える。例: v01.17.00 → v01.17.01）
    大きな作り直し・機能追加・修正 の順に2桁ずつ。Service Worker のキャッシュもこの値で切り替わる。 */
-const APP_VERSION = "v01.20.02";
+const APP_VERSION = "v01.20.03";
 const DATA_SRC = "https://raw.githubusercontent.com/robiningelbrecht/wca-rest-api/v1/";
 const WCA_API = "https://www.worldcubeassociation.org/api/v0/";
 
@@ -143,8 +143,10 @@ const compCache = {};
 function cacheGet(id){ if (compCache[id]) return compCache[id]; try { const s = localStorage.getItem("wca-comp-v1:"+id); if (s) return compCache[id] = cleanCompMeta(JSON.parse(s)); } catch(e){} return null; }
 function cachePut(id, m){ compCache[id] = m; try { localStorage.setItem("wca-comp-v1:"+id, JSON.stringify(m)); } catch(e){} }
 
-async function fetchJSON(url){
-  const res = await fetch(url, {cache:"no-cache"});
+async function fetchJSON(url, opts = {}){
+  // WCA公式API は「選手の登録情報が変わったか」だけで更新の有無を判断する（新しい成績が出ても「変更なし」と答える）。
+  // そのため WCA公式API には毎回取り直す指定（no-store）で問い合わせ、ブラウザに保存された古い応答を使わせない。
+  const res = await fetch(url, {cache:opts.noStore ? "no-store" : "no-cache"});
   if (!res.ok) { const err = new Error("HTTP "+res.status); err.status = res.status; throw err; }
   return res.json();
 }
@@ -207,7 +209,7 @@ async function loadId(id, opts = {}){
   const refreshing = !!STATE && STATE.person.id === person.id;   // 表示中の選手の取り直し
   const cached = apiCacheGet(person.id);                          // 前回 WCA公式API から取れた情報
   const recP = loadRecords(person.id, cached?.results);
-  const wpP = fetchJSON(WCA_API + "persons/" + encodeURIComponent(person.id)).then(cleanWcaPerson).catch(() => null);
+  const wpP = fetchJSON(WCA_API + "persons/" + encodeURIComponent(person.id), {noStore:true}).then(cleanWcaPerson).catch(() => null);
   loadMirrorDate();
   const ids = Object.keys(person.results || {});
   const comps = await loadComps(ids, (d,n) => {
@@ -434,7 +436,7 @@ async function loadRecords(id, fallback){
   let raw = null, fresh = false;
   try {
     let arr;
-    try { arr = await fetchJSON(WCA_API + "persons/" + encodeURIComponent(id) + "/results"); fresh = true; }
+    try { arr = await fetchJSON(WCA_API + "persons/" + encodeURIComponent(id) + "/results", {noStore:true}); fresh = true; }
     catch(e) { if (!Array.isArray(fallback)) throw e; arr = fallback; }   // 取れなければ前回取得した情報を使う
     if (RECS.id !== id) return null;
     raw = Array.isArray(arr) ? arr : null;
@@ -495,9 +497,27 @@ function cleanWcaPerson(j){
   return {rank:{singles, averages}, competitionCount:numOrNull(j.competition_count),
     recordTotals:{WR:num(rc.world), CR:num(rc.continental), NR:num(rc.national)}};
 }
+/* WCA公式API の自己ベスト・順位を重ねる。ただし、手元の情報（ミラー＋公式サイトに反映済みの大会）より古いものでは上書きしない。
+   - 参加大会数が手元より少なければ、その応答は古いとみなして使わない
+   - 種目ごとに、自己ベストが手元より悪ければ（古ければ）手元の値を残す */
 function applyWcaPerson(person, wp){
-  return {...person, rank:wp.rank, recordTotals:wp.recordTotals, rankSource:"wca",
-    numberOfCompetitions:wp.competitionCount ?? person.numberOfCompetitions};
+  const have = person.numberOfCompetitions ?? Object.keys(person.results || {}).length;
+  if (wp.competitionCount != null && wp.competitionCount < have) return person;
+  const pick = (mine, theirs) => {
+    const byId = new Map(mine.map(x => [x.eventId, x]));
+    for (const t of theirs) {
+      const m = byId.get(t.eventId);
+      if (!m || key(t.eventId, t.best) <= key(t.eventId, m.best)) byId.set(t.eventId, t);
+    }
+    return [...byId.values()];
+  };
+  const stale = (person.rank?.singles || []).some(m => { const t = wp.rank.singles.find(x => x.eventId === m.eventId); return !t || key(m.eventId, m.best) < key(m.eventId, t.best); })
+    || (person.rank?.averages || []).some(m => { const t = wp.rank.averages.find(x => x.eventId === m.eventId); return t && key(m.eventId, m.best) < key(m.eventId, t.best); });
+  return {...person,
+    rank:{singles:pick(person.rank?.singles || [], wp.rank.singles), averages:pick(person.rank?.averages || [], wp.rank.averages)},
+    // 記録数・参加大会数・「最新データ」の表示は、公式の応答が手元より古くないときだけ使う
+    ...(stale ? {} : {recordTotals:wp.recordTotals, rankSource:"wca"}),
+    numberOfCompetitions:Math.max(have, wp.competitionCount ?? 0)};
 }
 
 async function loadPostedComps(ids){
@@ -505,7 +525,7 @@ async function loadPostedComps(ids){
   const out = await loadComps(ids, () => {});
   await Promise.all(ids.filter(id => !out[id]).map(async id => {
     try {
-      const j = await fetchJSON(WCA_API + "competitions/" + encodeURIComponent(id));
+      const j = await fetchJSON(WCA_API + "competitions/" + encodeURIComponent(id), {noStore:true});
       const m = cleanCompMeta({name:j?.name, city:j?.city, country:j?.country_iso2, date:j?.start_date, end:j?.end_date});
       if (m.date) { cachePut(id, m); out[id] = m; }
     } catch(e) {}
