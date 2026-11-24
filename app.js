@@ -1,7 +1,7 @@
 "use strict";
 /* アプリのバージョン（更新したらここだけ変える。例: v01.17.00 → v01.17.01）
    大きな作り直し・機能追加・修正 の順に2桁ずつ。Service Worker のキャッシュもこの値で切り替わる。 */
-const APP_VERSION = "v01.20.00";
+const APP_VERSION = "v01.20.01";
 const DATA_SRC = "https://raw.githubusercontent.com/robiningelbrecht/wca-rest-api/v1/";
 const WCA_API = "https://www.worldcubeassociation.org/api/v0/";
 
@@ -180,14 +180,16 @@ function loadMirrorDate(){
   return MIRROR_DATE_P;
 }
 
-async function loadId(id){
+let LAST_LOAD = 0;          // 最後にデータを取得し終えた時刻（自動更新の判定に使う）
+async function loadId(id, opts = {}){
   id = str(String(id || ""), 10).toUpperCase();
   if (!ID_RE.test(id)) { setStatus("WCA ID の形式が正しくありません（数字4桁＋英字4文字＋数字2桁の10文字）。", true); return; }
   const my = ++loadToken;
+  LAST_LOAD = Date.now();
   LIVE = {id:null, state:"idle", comps:[]}; updateLiveNote();
   LIVE_OTHERS.clear();
   $("#cands").innerHTML = "";
-  setStatus(`<span>${esc(id)} の成績を取得中…</span>`);
+  setStatus(opts.auto ? `<span>最新の情報を確認中…</span>` : `<span>${esc(id)} の成績を取得中…</span>`);
   let person;
   try { person = cleanPerson(await fetchJSON(DATA_SRC + "persons/" + encodeURIComponent(id) + ".json")); }
   catch(e) {
@@ -209,7 +211,9 @@ async function loadId(id){
   if (my !== loadToken) return;
   const missing = ids.filter(i => !comps[i]).length;
   render(person, comps);
-  const showStatus = () => setStatus(`<span>${esc(person.name)}（${esc(person.id)}）を表示中</span>` + (missing ? `<span>※ ${missing}大会の開催日を取得できず、年のみで並べています</span>` : "")
+  const loadedAt = new Date();
+  const hhmm = `${String(loadedAt.getHours()).padStart(2, "0")}:${String(loadedAt.getMinutes()).padStart(2, "0")}`;
+  const showStatus = () => setStatus(`<span>${esc(person.name)}（${esc(person.id)}）を表示中・${hhmm} 時点</span>` + (missing ? `<span>※ ${missing}大会の開催日を取得できず、年のみで並べています</span>` : "")
     + (POSTED.length ? `<span>WCA公式サイトに反映済みの最新 ${POSTED.length}大会を、WCA公式APIから公式記録として取り込みました</span>` : "")
     + `<button type="button" class="btn ghost" id="refreshBtn" data-id="${esc(person.id)}">再読み込み</button>`);
   showStatus();
@@ -1577,6 +1581,24 @@ $("#moreBtn").addEventListener("click", () => { STATE.logShown += 20; renderLog(
 let rT = null; let lastW = innerWidth;
 addEventListener("resize", () => { if (innerWidth === lastW) return; lastW = innerWidth; clearTimeout(rT); rT = setTimeout(() => { if (STATE) { drawProg(); drawHist(); drawYears(); rhRender(); } }, 150); });
 document.addEventListener("click", e => { if (e.target.id === "refreshBtn") loadId(e.target.dataset.id); });
+
+/* ---------- 自動更新 ----------
+   ホーム画面から開いたアプリは、閉じても前の画面のまま再開するため、データが古いまま残る。
+   画面に戻ってきたときにデータが5分以上前のものなら、表示中の選手を取得し直す。
+   開いたままの間も、15分ごとに取得し直す（大会中の速報や、WCA公式サイトへの反映を追うため）。 */
+const AUTO_RESUME_MS = 5 * 60 * 1000, AUTO_INTERVAL_MS = 15 * 60 * 1000;
+function autoRefresh(minAge){
+  if (!STATE || document.visibilityState !== "visible" || navigator.onLine === false) return;
+  if (Date.now() - LAST_LOAD < minAge) return;
+  loadId(STATE.person.id, {auto:true});
+}
+function checkAppUpdate(){
+  try { navigator.serviceWorker?.getRegistration().then(r => r && r.update()).catch(() => {}); } catch(e){}
+}
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") { autoRefresh(AUTO_RESUME_MS); checkAppUpdate(); } });
+addEventListener("pageshow", e => { if (e.persisted) { autoRefresh(AUTO_RESUME_MS); checkAppUpdate(); } });
+addEventListener("online", () => autoRefresh(AUTO_RESUME_MS));
+setInterval(() => autoRefresh(AUTO_INTERVAL_MS), 60 * 1000);
 
 /* ---------- バージョン表示 ---------- */
 $("#appVer").textContent = APP_VERSION;
