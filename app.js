@@ -1,7 +1,7 @@
 "use strict";
 /* アプリのバージョン（更新したらここだけ変える。例: v01.17.00 → v01.17.01）
    大きな作り直し・機能追加・修正 の順に2桁ずつ。Service Worker のキャッシュもこの値で切り替わる。 */
-const APP_VERSION = "v01.20.01";
+const APP_VERSION = "v01.20.02";
 const DATA_SRC = "https://raw.githubusercontent.com/robiningelbrecht/wca-rest-api/v1/";
 const WCA_API = "https://www.worldcubeassociation.org/api/v0/";
 
@@ -191,52 +191,104 @@ async function loadId(id, opts = {}){
   $("#cands").innerHTML = "";
   setStatus(opts.auto ? `<span>最新の情報を確認中…</span>` : `<span>${esc(id)} の成績を取得中…</span>`);
   let person;
+  const wasShowing = !!STATE && STATE.person.id === id;
   try { person = cleanPerson(await fetchJSON(DATA_SRC + "persons/" + encodeURIComponent(id) + ".json")); }
   catch(e) {
     if (my !== loadToken) return;
+    if (wasShowing && e.status !== 404) {   // 取り直しに失敗しても、表示中の情報はそのまま残す
+      setStatus(`<span>最新の情報を確認できませんでした（通信を確認してください）。前に取得した情報を表示しています</span><button type="button" class="btn ghost" id="refreshBtn" data-id="${esc(id)}">再読み込み</button>`, true);
+      return;
+    }
     if (e.status === 404) setStatus(`WCA ID「${esc(id)}」は見つかりませんでした。IDの綴りを確認するか、氏名で検索してください（登録直後の選手はデータ反映まで1日ほどかかることがあります）。`, true);
     else setStatus(`データを取得できませんでした（${esc(e.message)}）。インターネット接続を確認して、もう一度お試しください。`, true);
     return;
   }
   if (my !== loadToken) return;
-  const recP = loadRecords(person.id);
+  const refreshing = !!STATE && STATE.person.id === person.id;   // 表示中の選手の取り直し
+  const cached = apiCacheGet(person.id);                          // 前回 WCA公式API から取れた情報
+  const recP = loadRecords(person.id, cached?.results);
   const wpP = fetchJSON(WCA_API + "persons/" + encodeURIComponent(person.id)).then(cleanWcaPerson).catch(() => null);
   loadMirrorDate();
-  POSTED = [];
   const ids = Object.keys(person.results || {});
   const comps = await loadComps(ids, (d,n) => {
-    if (my !== loadToken) return;
+    if (my !== loadToken || refreshing) return;
     setStatus(`<span>${esc(person.name)} の大会情報を取得中</span><span class="bar"><span style="width:${pct(d,n)}%"></span></span><span class="mono">${d}/${n}</span>`);
   });
   if (my !== loadToken) return;
   const missing = ids.filter(i => !comps[i]).length;
-  render(person, comps);
-  const loadedAt = new Date();
-  const hhmm = `${String(loadedAt.getHours()).padStart(2, "0")}:${String(loadedAt.getMinutes()).padStart(2, "0")}`;
+  let usedCache = false, hhmm = "";
+  const stamp = t => { const d = new Date(t); return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; };
   const showStatus = () => setStatus(`<span>${esc(person.name)}（${esc(person.id)}）を表示中・${hhmm} 時点</span>` + (missing ? `<span>※ ${missing}大会の開催日を取得できず、年のみで並べています</span>` : "")
     + (POSTED.length ? `<span>WCA公式サイトに反映済みの最新 ${POSTED.length}大会を、WCA公式APIから公式記録として取り込みました</span>` : "")
+    + (usedCache ? `<span>WCA公式サイトに接続できなかったため、${esc(stamp(cached.at))} に取得した公式の情報を使っています</span>` : "")
     + `<button type="button" class="btn ghost" id="refreshBtn" data-id="${esc(person.id)}">再読み込み</button>`);
-  showStatus();
+  // 初めて表示する選手は、まずミラー（＋前回取得した WCA公式の情報）ですぐに表示する。
+  // 表示中の選手を取り直すときは、途中の古い情報で画面を書き換えず、すべて揃ってから一度だけ表示し直す。
+  if (!refreshing) {
+    const first = await composePerson(person, comps, cached?.results, cached?.show);
+    if (my !== loadToken) return;
+    POSTED = first.posted; hhmm = stamp(cached ? cached.at : Date.now());
+    render(first.person, first.comps); showStatus(); showHomeHint(person);
+  }
   try { localStorage.setItem("wca-last-id", person.id); } catch(e){}
   try { history.replaceState(null, "", location.pathname + "?id=" + encodeURIComponent(person.id)); } catch(e){}
-  showHomeHint(person);
-  // WCA公式サイトに反映済みの大会を確認してから、残りの大会だけを WCA Live で探す
-  let base = {person, comps}, changed = false;
+  // WCA公式API の最新の情報（取れなければ前回取得した情報）で仕上げる
   const [api, wp] = await Promise.all([recP, wpP]);
   if (my !== loadToken) return;
-  if (api) {
-    const posted = mergePosted(person, api);
-    if (posted.added.length) {
-      const more = await loadPostedComps(posted.added);
-      if (my !== loadToken) return;
-      base = {person:posted.person, comps:{...comps, ...more}};
-      POSTED = posted.added; changed = true;
-    }
-  }
-  // 自己ベスト・順位などは、ミラー（1日1回更新）ではなく WCA公式API の最新の値を使う
-  if (wp) { base = {...base, person:applyWcaPerson(base.person, wp)}; changed = true; }
-  if (changed) { render(base.person, base.comps); showStatus(); showHomeHint(person); }
+  const apiOk = !!(api && api.fresh), wpOk = !!wp;
+  if (apiOk || wpOk) apiCachePut(person.id, {results:apiOk ? api.raw : cached?.results, show:wpOk ? wp : cached?.show});
+  usedCache = !!cached && (!apiOk || !wpOk);
+  const base = await composePerson(person, comps, apiOk ? api.raw : cached?.results, wpOk ? wp : cached?.show);
+  if (my !== loadToken) return;
+  POSTED = base.posted;
+  hhmm = stamp(Date.now());
+  LAST_LOAD = Date.now();
+  render(base.person, base.comps); showStatus(); showHomeHint(person);
   loadLive(base.person, base.comps, my);
+}
+
+/* ミラーの選手データに、WCA公式サイトに反映済みの大会（results）と最新の自己ベスト・順位（show）を重ねる */
+async function composePerson(person, comps, results, show){
+  let p = person, c = comps, posted = [];
+  if (Array.isArray(results)) {
+    const m = mergePosted(person, results);
+    if (m.added.length) { const more = await loadPostedComps(m.added); p = m.person; c = {...comps, ...more}; posted = m.added; }
+  }
+  if (show) p = applyWcaPerson(p, show);
+  return {person:p, comps:c, posted};
+}
+
+/* 前回 WCA公式API から取れた情報を端末に保存する（通信できないときや、開いた直後の表示に使う） */
+const API_CACHE_PREFIX = "wca-api-v1:", API_CACHE_MAX = 5;
+const API_KEEP = ["competition_id","event_id","round_type_id","format_id","pos","best","average","attempts","wca_id","regional_single_record","regional_average_record"];
+function apiCacheGet(id){
+  try {
+    const j = JSON.parse(localStorage.getItem(API_CACHE_PREFIX + id) || "null");
+    if (!j || typeof j.at !== "number") return null;
+    return {at:j.at, results:Array.isArray(j.results) ? j.results : null, show:j.show ? cleanWcaPersonCached(j.show) : null};
+  } catch(e) { return null; }
+}
+function apiCachePut(id, data){
+  try {
+    const results = Array.isArray(data.results) ? data.results.map(x => { const o = {}; for (const k of API_KEEP) if (x && x[k] !== undefined) o[k] = x[k]; return o; }) : null;
+    const val = JSON.stringify({at:Date.now(), results, show:data.show || null});
+    const list = JSON.parse(localStorage.getItem(API_CACHE_PREFIX + "list") || "[]").filter(x => x !== id);
+    list.unshift(id);
+    for (const old of list.splice(API_CACHE_MAX)) localStorage.removeItem(API_CACHE_PREFIX + old);
+    localStorage.setItem(API_CACHE_PREFIX + id, val);
+    localStorage.setItem(API_CACHE_PREFIX + "list", JSON.stringify(list));
+  } catch(e) {}
+}
+/* 保存しておいた選手情報（cleanWcaPerson の結果）を読み直すときも、形式を確かめる */
+function cleanWcaPersonCached(o){
+  o = obj(o);
+  const ranks = list => (Array.isArray(list) ? list : []).filter(x => x && TOKEN_RE.test(x.eventId)).map(x => ({
+    eventId:x.eventId, best:num(x.best), rank:{world:numOrNull(x.rank?.world), continent:numOrNull(x.rank?.continent), country:numOrNull(x.rank?.country)}}));
+  const singles = ranks(o.rank?.singles);
+  if (!singles.length) return null;
+  const rt = obj(o.recordTotals);
+  return {rank:{singles, averages:ranks(o.rank?.averages)}, competitionCount:numOrNull(o.competitionCount),
+    recordTotals:{WR:num(rt.WR), CR:num(rt.CR), NR:num(rt.NR)}};
 }
 
 async function onSearch(input){
@@ -377,11 +429,13 @@ let RECS = {id:null, state:"idle", map:null};
 const recKey = (cid, eid, best, avg) => `${cid}|${eid}|${best}|${avg}`;
 function recClass(code){ return code === "WR" ? "wr" : code === "NR" ? "nr" : "cr"; }
 function badge(code){ return code ? `<span class="rec rec-${recClass(code)}" title="${code === "WR" ? "世界記録" : code === "NR" ? "国内記録" : "大陸記録"}">${esc(code)}</span>` : ""; }
-async function loadRecords(id){
+async function loadRecords(id, fallback){
   RECS = {id, state:"loading", map:null}; updateRecNote();
-  let raw = null;
+  let raw = null, fresh = false;
   try {
-    const arr = await fetchJSON(WCA_API + "persons/" + encodeURIComponent(id) + "/results");
+    let arr;
+    try { arr = await fetchJSON(WCA_API + "persons/" + encodeURIComponent(id) + "/results"); fresh = true; }
+    catch(e) { if (!Array.isArray(fallback)) throw e; arr = fallback; }   // 取れなければ前回取得した情報を使う
     if (RECS.id !== id) return null;
     raw = Array.isArray(arr) ? arr : null;
     const map = new Map();
@@ -396,7 +450,7 @@ async function loadRecords(id){
   }
   if (STATE && STATE.person.id === id) { applyRecs(); renderRecordViews(); }
   updateRecNote();
-  return raw;
+  return raw ? {raw, fresh} : null;
 }
 
 /* ---------- WCA公式サイトに反映済みだが、ミラー（1日1回更新）にまだ入っていない大会 ----------
